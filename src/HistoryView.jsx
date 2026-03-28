@@ -81,6 +81,76 @@ const PRESETS = [
     newsHeadline: "US forces enter Iran",
     newsTime: "2026-03-26T12:00",
   },
+  {
+    label: "Maduro Captured — $400K Insider Bet 🚨",
+    description: "Fresh account bet $20K at 8¢ five hours before Operation Absolute Resolve. Won $400K+.",
+    search: "maduro",
+    venue: "Polymarket",
+    dateStart: "2026-01-01T00:00",
+    dateEnd: "2026-01-03T12:00",
+    newsHeadline: "US Operation Absolute Resolve captures Maduro",
+    newsTime: "2026-01-03T04:00",
+  },
+  {
+    label: "Nobel Peace Prize — Machado 🚨",
+    description: "Odds went 3% → 73% at 1 AM before announcement. Three accounts made ~$90K. Norway investigating.",
+    search: "nobel peace",
+    venue: "Polymarket",
+    dateStart: "2025-10-09T18:00",
+    dateEnd: "2025-10-10T12:00",
+    newsHeadline: "Nobel Peace Prize awarded to Maria Corina Machado",
+    newsTime: "2025-10-10T09:00",
+  },
+  {
+    label: "Swift & Kelce Engaged",
+    description: "\"romanticpaul\" bought 1,200+ shares 15 min before Instagram announcement. Another trader won $52K.",
+    search: "swift kelce",
+    venue: "Polymarket",
+    dateStart: "2025-08-25T00:00",
+    dateEnd: "2025-08-26T20:00",
+    newsHeadline: "Taylor Swift & Travis Kelce announce engagement on Instagram",
+    newsTime: "2025-08-26T16:00",
+  },
+  {
+    label: "Iran Strikes — Feb 2026 🚨",
+    description: "Six fresh accounts netted ~$1M. Funded Feb 22, bets placed Feb 27 hours before US-Israel strikes.",
+    search: "iran strikes",
+    venue: "Polymarket",
+    dateStart: "2026-02-26T00:00",
+    dateEnd: "2026-03-01T00:00",
+    newsHeadline: "US-Israel strikes on Iran begin, Khamenei killed",
+    newsTime: "2026-02-28T06:00",
+  },
+  {
+    label: "Google Year in Search — AlphaRaccoon",
+    description: "$3M deposited, 22-for-23 success rate. Made $1.15M in 24 hours predicting exact Google results.",
+    search: "google search",
+    venue: "Polymarket",
+    dateStart: "2025-12-06T00:00",
+    dateEnd: "2025-12-10T00:00",
+    newsHeadline: "Google Year in Search 2025 results announced",
+    newsTime: "2025-12-09T00:00",
+  },
+  {
+    label: "Israel-Iran — IDF Reservist Indicted 🚨",
+    description: "IDF reservist used classified intel to bet on exact strike dates. $150K profit. Criminal charges filed.",
+    search: "israel iran",
+    venue: "Polymarket",
+    dateStart: "2025-06-12T00:00",
+    dateEnd: "2025-06-14T00:00",
+    newsHeadline: "Israel Operation Rising Lion begins",
+    newsTime: "2025-06-13T06:00",
+  },
+  {
+    label: "OpenAI Employee Fired",
+    description: "OpenAI confirmed firing employee for insider trading on prediction markets. 77 suspicious positions found.",
+    search: "openai",
+    venue: "Polymarket",
+    dateStart: "2025-12-08T00:00",
+    dateEnd: "2025-12-12T00:00",
+    newsHeadline: "GPT-5.2 launched — four accounts entered positions a week prior",
+    newsTime: "2025-12-11T18:00",
+  },
 ];
 
 export default function HistoryView() {
@@ -101,6 +171,9 @@ export default function HistoryView() {
   const [annoText, setAnnoText] = useState("");
   const [annoTime, setAnnoTime] = useState("");
   const [zoomHours, setZoomHours] = useState(null); // null = show all data
+  const [userPresets, setUserPresets] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("dd_history_presets") || "[]"); } catch { return []; }
+  });
 
   // ─── Search ───────────────────────────────────────────────
   const doSearch = useCallback(async () => {
@@ -183,24 +256,68 @@ export default function HistoryView() {
 
   // ─── Load a case study preset ──────────────────────────────
   const loadPreset = useCallback(async (preset) => {
+    const dr = { start: preset.dateStart, end: preset.dateEnd };
     setQuery(preset.search);
-    setDateRange({ start: preset.dateStart, end: preset.dateEnd });
-    setAnnotations([{ id: uid(), text: preset.newsHeadline, ts: new Date(preset.newsTime).getTime() }]);
+    setDateRange(dr);
+    const newsAnno = { id: uid(), text: preset.newsHeadline, ts: new Date(preset.newsTime).getTime() };
+    setAnnotations([newsAnno]);
     setScoredData(null);
     setSpikes([]);
     setSelected(null);
-    // Trigger search
+    setResults([]);
     setSearching(true);
     setError(null);
     try {
       const res = await searchMarkets(preset.search);
-      setResults(res);
-      if (res.length === 0) setError("No markets found — try adjusting the search.");
+      // Auto-select first result matching the venue (or just first result)
+      const match = (preset.venue ? res.find((m) => m.venue === preset.venue) : null) || res[0];
+      if (match) {
+        setSelected(match);
+        setSearching(false);
+        // Keep the preset's annotations, add close marker if available
+        if (match.closeTime) {
+          const closeAnno = { id: uid(), text: `Result confirmed${match.result ? ` — ${match.result.toUpperCase()} wins` : ""} · Betting stopped`, ts: new Date(match.closeTime).getTime(), auto: true };
+          setAnnotations([newsAnno, closeAnno]);
+        }
+        // Auto-fetch with the preset date range
+        fetchData(match, dr);
+      } else {
+        setResults(res);
+        setSearching(false);
+        if (res.length === 0) setError("No markets found — try adjusting the search.");
+      }
     } catch (e) {
       setError("Search failed.");
+      setSearching(false);
     }
-    setSearching(false);
-  }, []);
+  }, [fetchData]);
+
+  // ─── Save / delete user case study ─────────────────────────
+  const saveAsPreset = useCallback(() => {
+    if (!selected || !scoredData) return;
+    const newsAnnos = annotations.filter((a) => !a.auto);
+    const newPreset = {
+      label: selected.name.slice(0, 50),
+      description: `${spikes.length} spike${spikes.length !== 1 ? "s" : ""} detected · ${selected.venue}`,
+      search: query || selected.name.split(" ").slice(0, 3).join(" ").toLowerCase(),
+      venue: selected.venue,
+      dateStart: dateRange.start,
+      dateEnd: dateRange.end,
+      newsHeadline: newsAnnos[0]?.text || "",
+      newsTime: newsAnnos[0] ? new Date(newsAnnos[0].ts).toISOString().slice(0, 16) : "",
+      userSaved: true,
+      savedAt: Date.now(),
+    };
+    const updated = [...userPresets, newPreset];
+    setUserPresets(updated);
+    localStorage.setItem("dd_history_presets", JSON.stringify(updated));
+  }, [selected, scoredData, annotations, spikes, query, dateRange, userPresets]);
+
+  const deleteUserPreset = useCallback((idx) => {
+    const updated = userPresets.filter((_, i) => i !== idx);
+    setUserPresets(updated);
+    localStorage.setItem("dd_history_presets", JSON.stringify(updated));
+  }, [userPresets]);
 
   // ─── Quick date presets ───────────────────────────────────
   const setPreset = (hours) => {
@@ -420,13 +537,40 @@ export default function HistoryView() {
                   <YAxis yAxisId="vol" tick={{ fontSize: 8, fill: C.textDim }} axisLine={false} tickLine={false} width={35} label={{ value: "Volume", angle: -90, position: "insideLeft", fill: C.textDim, fontSize: 8 }} />
                   <YAxis yAxisId="price" orientation="right" tick={{ fontSize: 8, fill: C.textDim }} axisLine={false} tickLine={false} width={35} domain={[0, 1]} label={{ value: "Price", angle: 90, position: "insideRight", fill: C.textDim, fontSize: 8 }} />
                   <Tooltip
-                    contentStyle={{ background: C.bgElevated, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 10, color: C.text }}
-                    labelFormatter={(label) => `${label} UTC`}
-                    formatter={(val, name) => {
-                      if (name === "yesVol") return [val, "YES buys"];
-                      if (name === "noVol") return [val, "NO buys"];
-                      if (name === "price") return [typeof val === "number" ? `${(val * 100).toFixed(1)}¢` : "—", "Price"];
-                      return [val, name];
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0]?.payload || {};
+                      const yesPrice = d.price != null ? d.price : null;
+                      const noPrice = yesPrice != null ? 1 - yesPrice : null;
+                      const yesVol = d.yesVol || 0;
+                      const noVol = d.noVol || 0;
+                      const yesDollars = yesPrice != null ? Math.round(yesVol * yesPrice) : null;
+                      const noDollars = noPrice != null ? Math.round(noVol * noPrice) : null;
+                      return (
+                        <div style={{ background: C.bgElevated, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px", fontSize: 10, color: C.text, lineHeight: 1.6 }}>
+                          <div style={{ fontWeight: 700, marginBottom: 4 }}>{label} UTC</div>
+                          {yesVol > 0 && (
+                            <div style={{ color: C.neon }}>
+                              YES: {yesVol.toLocaleString()} contracts @ {yesPrice != null ? `${(yesPrice * 100).toFixed(1)}¢` : "—"}
+                              {yesDollars != null && <span style={{ color: C.textMuted }}> = ${yesDollars.toLocaleString()}</span>}
+                            </div>
+                          )}
+                          {noVol > 0 && (
+                            <div style={{ color: "#ff88cc" }}>
+                              NO: {noVol.toLocaleString()} contracts @ {noPrice != null ? `${(noPrice * 100).toFixed(1)}¢` : "—"}
+                              {noDollars != null && <span style={{ color: C.textMuted }}> = ${noDollars.toLocaleString()}</span>}
+                            </div>
+                          )}
+                          {yesVol === 0 && noVol === 0 && d.volume > 0 && (
+                            <div style={{ color: C.textMuted }}>Volume: {d.volume.toLocaleString()}</div>
+                          )}
+                          {yesPrice != null && (
+                            <div style={{ color: C.blue, marginTop: 2, borderTop: `1px solid ${C.border}`, paddingTop: 3 }}>
+                              YES price: {(yesPrice * 100).toFixed(1)}¢ · NO price: {(noPrice * 100).toFixed(1)}¢
+                            </div>
+                          )}
+                        </div>
+                      );
                     }}
                   />
 
@@ -647,6 +791,14 @@ export default function HistoryView() {
                 ))}
               </div>
             )}
+
+            {/* Save as Case Study */}
+            <div style={{ textAlign: "center", marginBottom: 14 }}>
+              <button onClick={saveAsPreset}
+                style={{ padding: "8px 16px", fontSize: 11, fontWeight: 700, background: C.bgCard, color: C.neon, border: `1px solid ${C.neon}33`, borderRadius: 6, cursor: "pointer" }}>
+                + Save as Case Study
+              </button>
+            </div>
           </>
         )}
 
@@ -667,7 +819,7 @@ export default function HistoryView() {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 {PRESETS.map((p, i) => (
-                  <div key={i} onClick={() => loadPreset(p)}
+                  <div key={`builtin-${i}`} onClick={() => loadPreset(p)}
                     style={{ padding: "10px 12px", background: C.bgElevated, border: `1px solid ${C.border}`, borderRadius: 8, cursor: "pointer", transition: "border-color 0.15s" }}
                     onMouseEnter={(e) => e.currentTarget.style.borderColor = C.neon + "44"}
                     onMouseLeave={(e) => e.currentTarget.style.borderColor = C.border}>
@@ -680,6 +832,32 @@ export default function HistoryView() {
                   </div>
                 ))}
               </div>
+
+              {/* User-saved case studies */}
+              {userPresets.length > 0 && (
+                <>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginTop: 14, marginBottom: 8, paddingLeft: 4 }}>
+                    Your Saved Case Studies
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    {userPresets.map((p, i) => (
+                      <div key={`user-${i}`} style={{ padding: "10px 12px", background: C.bgElevated, border: `1px solid ${C.neon}18`, borderRadius: 8, cursor: "pointer", transition: "border-color 0.15s", position: "relative" }}
+                        onClick={() => loadPreset(p)}
+                        onMouseEnter={(e) => e.currentTarget.style.borderColor = C.neon + "44"}
+                        onMouseLeave={(e) => e.currentTarget.style.borderColor = C.neon + "18"}>
+                        <button onClick={(e) => { e.stopPropagation(); deleteUserPreset(i); }}
+                          style={{ position: "absolute", top: 4, right: 6, background: "none", border: "none", color: C.textDim, cursor: "pointer", fontSize: 12 }}>✕</button>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 4, paddingRight: 16 }}>{p.label}</div>
+                        <div style={{ fontSize: 10, color: C.textMuted, lineHeight: 1.4 }}>{p.description}</div>
+                        <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                          <span style={{ fontSize: 8, padding: "2px 5px", borderRadius: 3, background: p.venue === "Polymarket" ? `${C.poly}14` : `${C.kalshi}14`, color: p.venue === "Polymarket" ? C.poly : C.kalshi, fontWeight: 700 }}>{p.venue}</span>
+                          <span style={{ fontSize: 8, color: C.textDim }}>{p.dateStart.slice(0, 10)} → {p.dateEnd.slice(0, 10)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
