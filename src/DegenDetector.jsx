@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell } from "recharts";
-import { fetchAllMarkets, refreshMarkets, pruneStale } from "./api/index.js";
+import { fetchAllMarkets, refreshMarkets, pruneStale, isAlertEligible } from "./api/index.js";
 
 // ─── Theme ──────────────────────────────────────────────────────
 const C = {
@@ -534,6 +534,9 @@ export default function DegenDetector() {
 
         // Check for alerts on updated data
         updated.forEach((m) => {
+          // Skip alert checking until we have ~3min of baseline data
+          if (!isAlertEligible(m.id)) return;
+
           const cur = m.bins.at(-1);
           const prevBins = m.bins.slice(0, -1);
           const prevMax = Math.max(...prevBins, 1);

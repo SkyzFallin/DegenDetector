@@ -16,6 +16,10 @@ function getCurrentBinIndex() {
   return Math.floor(Date.now() / 60000) % BIN_COUNT;
 }
 
+// Minimum number of polls before we trust a market's bin data for alerting.
+// At 10s polling, 18 polls = ~3 minutes of baseline data.
+const MIN_POLLS_FOR_ALERTING = 18;
+
 function getOrCreateBinState(marketId, currentVolume) {
   if (!binStore.has(marketId)) {
     binStore.set(marketId, {
@@ -23,6 +27,7 @@ function getOrCreateBinState(marketId, currentVolume) {
       lastVolume: currentVolume,
       lastBinTs: Date.now(),
       lastBinIdx: getCurrentBinIndex(),
+      pollCount: 0, // track how many updates we've seen
     });
   }
   return binStore.get(marketId);
@@ -31,6 +36,7 @@ function getOrCreateBinState(marketId, currentVolume) {
 function updateBins(marketId, currentVolume) {
   const state = getOrCreateBinState(marketId, currentVolume);
   const nowIdx = getCurrentBinIndex();
+  state.pollCount += 1;
 
   // If we've moved to a new bin, zero out skipped bins
   if (nowIdx !== state.lastBinIdx) {
@@ -44,8 +50,11 @@ function updateBins(marketId, currentVolume) {
   }
 
   // Accumulate volume delta into current bin
-  const delta = Math.max(0, currentVolume - state.lastVolume);
-  state.bins[nowIdx] += delta;
+  // Skip the very first poll — the initial delta is meaningless (not a real spike)
+  if (state.pollCount > 1) {
+    const delta = Math.max(0, currentVolume - state.lastVolume);
+    state.bins[nowIdx] += delta;
+  }
   state.lastVolume = currentVolume;
 
   // Return bins in chronological order (oldest first)
@@ -54,6 +63,14 @@ function updateBins(marketId, currentVolume) {
     ordered.push(state.bins[(nowIdx + i) % BIN_COUNT]);
   }
   return ordered;
+}
+
+/**
+ * Check if a market has enough bin history to be eligible for alerting.
+ */
+export function isAlertEligible(marketId) {
+  const state = binStore.get(marketId);
+  return state && state.pollCount >= MIN_POLLS_FOR_ALERTING;
 }
 
 // ─── Public API ──────────────────────────────────────────────
