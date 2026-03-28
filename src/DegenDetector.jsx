@@ -230,13 +230,14 @@ function StatCard({ label, value, sub, color = C.text, icon }) {
 
 function MarketRow({ market, isSelected, onClick, onPin, onFav, isFav }) {
   const warming = market._warmup;
+  const closed = !!market._closedAt || market.expiryHours < 0.05;
   const bins = market.bins;
   const last5 = bins.slice(-5);
   const prev = bins.slice(0, -5);
   const recentAvg = last5.reduce((a, b) => a + b, 0) / (last5.length || 1);
   const baseAvg = Math.max(1, prev.reduce((a, b) => a + b, 0) / (prev.length || 1));
   const activity = warming ? 0 : recentAvg / baseAvg;
-  const hot = !warming && activity > 4;
+  const hot = !warming && !closed && activity > 4;
   const sus = warming ? 0 : computeSuspicion(market);
   return (
     <div onClick={onClick} style={{
@@ -245,6 +246,7 @@ function MarketRow({ market, isSelected, onClick, onPin, onFav, isFav }) {
       background: isSelected ? C.bgCardHover : "transparent",
       borderBottom: `1px solid ${C.border}`, cursor: "pointer", transition: "background 0.15s",
       borderLeft: market.pinned ? `3px solid ${C.neon}44` : `3px solid transparent`,
+      opacity: closed ? 0.5 : 1,
     }} onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = C.bgCardHover; }}
        onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}>
       <div style={{ minWidth: 0 }}>
@@ -258,7 +260,7 @@ function MarketRow({ market, isSelected, onClick, onPin, onFav, isFav }) {
         <div style={{ display: "flex", alignItems: "center", gap: 4, paddingLeft: 16 }}>
           <VenueBadge venue={market.venue} />
           <CatBadge cat={market.category} />
-          <ExpiryBadge hours={market.expiryHours} />
+          {closed ? <span style={{ fontSize: 8, fontWeight: 800, padding: "1px 5px", borderRadius: 3, background: C.textDim + "22", color: C.textDim }}>CLOSED</span> : <ExpiryBadge hours={market.expiryHours} />}
         </div>
       </div>
       <SuspicionBadge score={sus} compact />
@@ -381,7 +383,7 @@ function DetailPanel({ market, telegramCfg }) {
             { label: "Suddenness", val: (() => { const r5 = bins.slice(-5); const p10 = bins.slice(-15,-5); const ra = r5.reduce((a,b)=>a+b,0)/(r5.length||1); const ba = Math.max(1,p10.reduce((a,b)=>a+b,0)/(p10.length||1)); return clamp((ra/ba-1)/4,0,20); })(), max: 20, col: C.danger },
             { label: "Z-Score", val: clamp(z / 12, 0, 1) * 15, max: 15, col: C.warning },
             { label: "Conviction", val: clamp(Math.abs(market.priceChange) / 0.10, 0, 1) * 15, max: 15, col: C.blue },
-            { label: "Regime Shift", val: (() => { const cp = market.price, bp = market.baselinePrice; if (cp == null || bp == null) return 0; const r5 = bins.slice(-5); const p10 = bins.slice(-15,-5); const ra = r5.reduce((a,b)=>a+b,0)/(r5.length||1); const ba = Math.max(1,p10.reduce((a,b)=>a+b,0)/(p10.length||1)); if (ra <= ba * 2) return 0; return clamp(Math.abs(cp-bp)/0.50,0,1)*15*clamp(Math.max(cp,1-cp)/0.80,0,1); })(), max: 15, col: "#ff44ff" },
+            { label: "Price Flip", val: (() => { const cp = market.price, bp = market.baselinePrice; if (cp == null || bp == null) return 0; const r5 = bins.slice(-5); const p10 = bins.slice(-15,-5); const ra = r5.reduce((a,b)=>a+b,0)/(r5.length||1); const ba = Math.max(1,p10.reduce((a,b)=>a+b,0)/(p10.length||1)); if (ra <= ba * 2) return 0; return clamp(Math.abs(cp-bp)/0.50,0,1)*15*clamp(Math.max(cp,1-cp)/0.80,0,1); })(), max: 15, col: "#ff44ff" },
             { label: "Leak Prob", val: (market.leakProb || 0.5) * 15, max: 15, col: C.poly },
             { label: "Off-hrs", val: (() => { const hr = new Date().getUTCHours(); return (hr >= 22 || hr <= 6) ? 10 : (hr >= 20 || hr <= 8) ? 5 : 0; })(), max: 10, col: C.kalshi },
             { label: "No News", val: market.hasRecentNews ? 0 : 10, max: 10, col: C.neon },
@@ -468,19 +470,30 @@ export default function DegenDetector() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [monitoringSince] = useState(() => Date.now());
   const [favorites, setFavorites] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("dd_favorites") || "[]"); } catch { return []; }
+    try {
+      const saved = JSON.parse(localStorage.getItem("dd_favorites") || "[]");
+      // Auto-prune favorites older than 7 days that are no longer live
+      const sevenDays = 7 * 86400000;
+      const pruned = saved.filter((f) => !f.addedAt || Date.now() - f.addedAt < sevenDays);
+      if (pruned.length !== saved.length) {
+        try { localStorage.setItem("dd_favorites", JSON.stringify(pruned)); } catch {}
+      }
+      return pruned;
+    } catch { return []; }
   });
   const tickRef = useRef(0);
   const frozenRef = useRef(false);
   const marketsRef = useRef(markets);
   const soundOnRef = useRef(soundOn);
+  const favIdsRef = useRef(new Set());
   useEffect(() => { marketsRef.current = markets; }, [markets]);
   useEffect(() => { soundOnRef.current = soundOn; }, [soundOn]);
+  useEffect(() => { favIdsRef.current = new Set(favorites.map((f) => f.id)); }, [favorites]);
   useEffect(() => { telegramRef.current = telegramCfg; }, [telegramCfg]);
 
   // Keep rolling bin store bounded to currently tracked markets
   useEffect(() => {
-    pruneStale(markets.map((m) => m.id));
+    if (markets.length > 0) pruneStale(markets.map((m) => m.id));
   }, [markets]);
 
   // ─── Initial fetch ──────────────────────────────────────────
@@ -514,7 +527,7 @@ export default function DegenDetector() {
       if (frozenRef.current) return;
       tickRef.current += 1;
       try {
-        const updated = await refreshMarkets(marketsRef.current);
+        const updated = await refreshMarkets(marketsRef.current, favIdsRef.current);
         setMarkets(updated);
 
         // Check for alerts on updated data
@@ -577,7 +590,7 @@ export default function DegenDetector() {
   const isFavorite = useCallback((id) => favorites.some((f) => f.id === id), [favorites]);
   const manualRefresh = useCallback(async () => {
     try {
-      const updated = await refreshMarkets(marketsRef.current);
+      const updated = await refreshMarkets(marketsRef.current, favIdsRef.current);
       setMarkets(updated);
       setLastUpdated(Date.now());
       setFetchError(null);
@@ -596,10 +609,12 @@ export default function DegenDetector() {
       return true;
     }).sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      const aClosed = !!a._closedAt, bClosed = !!b._closedAt;
+      if (aClosed !== bClosed) return aClosed ? 1 : -1;
       const aFav = isFavorite(a.id), bFav = isFavorite(b.id);
       if (aFav !== bFav) return aFav ? -1 : 1;
       if (sortBy === "suspicion") return computeSuspicion(b) - computeSuspicion(a);
-      if (sortBy === "z") return robustZ(b.bins.at(-1), b.bins) - robustZ(a.bins.at(-1), a.bins);
+      if (sortBy === "z") { const actA = a.bins.slice(-5).reduce((s,v)=>s+v,0) / Math.max(1, a.bins.slice(0,-5).reduce((s,v)=>s+v,0) / (a.bins.length-5||1)); const actB = b.bins.slice(-5).reduce((s,v)=>s+v,0) / Math.max(1, b.bins.slice(0,-5).reduce((s,v)=>s+v,0) / (b.bins.length-5||1)); return actB - actA; }
       if (sortBy === "volume") return b.totalVolume24h - a.totalVolume24h;
       if (sortBy === "leak") return (b.leakProb || 0) - (a.leakProb || 0);
       return 0;
@@ -615,7 +630,7 @@ export default function DegenDetector() {
 
   return (
     <div onMouseEnter={() => { frozenRef.current = true; }} onMouseLeave={() => { frozenRef.current = false; }}
-      style={{ fontFamily: "'Space Grotesk', system-ui, sans-serif", background: C.bg, color: C.text, minHeight: "100vh", display: "flex", flexDirection: "column", fontSize: 13 }}>
+      style={{ fontFamily: "'Space Grotesk', system-ui, sans-serif", background: C.bg, color: C.text, height: "100vh", display: "flex", flexDirection: "column", fontSize: 13 }}>
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: ${C.bg}; } ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 3px; }
@@ -720,7 +735,7 @@ export default function DegenDetector() {
               <div style={{ marginLeft: "auto", display: "flex", gap: 3, alignItems: "center" }}>
                 <span style={{ fontSize: 8, color: C.textDim }}>Sort:</span>
                 {["suspicion", "z", "volume", "leak"].map((s) => (
-                  <button key={s} onClick={() => setSortBy(s)} style={{ padding: "2px 6px", fontSize: 8, fontWeight: 700, background: sortBy === s ? C.neonDim : "transparent", color: sortBy === s ? C.neon : C.textDim, border: `1px solid ${sortBy === s ? C.neon + "22" : "transparent"}`, borderRadius: 3, cursor: "pointer", textTransform: "uppercase" }}>{s === "suspicion" ? "sus" : s}</button>
+                  <button key={s} onClick={() => setSortBy(s)} style={{ padding: "2px 6px", fontSize: 8, fontWeight: 700, background: sortBy === s ? C.neonDim : "transparent", color: sortBy === s ? C.neon : C.textDim, border: `1px solid ${sortBy === s ? C.neon + "22" : "transparent"}`, borderRadius: 3, cursor: "pointer", textTransform: "uppercase" }}>{s === "suspicion" ? "sus" : s === "z" ? "activity" : s}</button>
                 ))}
               </div>
             </div>
@@ -768,7 +783,7 @@ export default function DegenDetector() {
                           {!liveMarket._warmup && <div style={{ fontSize: 9, color: susColor(computeSuspicion(liveMarket)), fontWeight: 700 }}>Sus: {computeSuspicion(liveMarket)}</div>}
                         </div>
                       ) : (
-                        <span style={{ fontSize: 9, color: C.textDim }}>Not live</span>
+                        <span style={{ fontSize: 9, padding: "2px 6px", background: C.textDim + "22", color: C.textDim, borderRadius: 3, fontWeight: 700 }}>CLOSED</span>
                       )}
                       <button onClick={() => { setSelectedId(fav.id); setView("dashboard"); }} style={{ padding: "4px 8px", fontSize: 9, fontWeight: 700, background: C.neonDim, color: C.neon, border: `1px solid ${C.neon}33`, borderRadius: 4, cursor: "pointer" }}>View</button>
                     </div>
