@@ -144,10 +144,12 @@ export async function analyzeMarketWallets(conditionId) {
     return empty;
   }
 
-  // Aggregate by wallet
+  // Aggregate by wallet + track YES/NO volume
   const walletVolumes = new Map(); // wallet → total $ volume
   const walletTrades = new Map(); // wallet → trade count
   let totalVolume = 0;
+  let buyVolume = 0;
+  let sellVolume = 0;
   let whaleCount = 0;
   const whales = [];
 
@@ -157,6 +159,8 @@ export async function analyzeMarketWallets(conditionId) {
     walletVolumes.set(t.wallet, (walletVolumes.get(t.wallet) || 0) + dollarSize);
     walletTrades.set(t.wallet, (walletTrades.get(t.wallet) || 0) + 1);
     totalVolume += dollarSize;
+    if (t.side === "BUY") buyVolume += dollarSize;
+    else if (t.side === "SELL") sellVolume += dollarSize;
     if (dollarSize >= 1000) {
       whaleCount++;
       whales.push({ wallet: t.wallet, size: dollarSize, name: t.name, side: t.side });
@@ -202,12 +206,19 @@ export async function analyzeMarketWallets(conditionId) {
 
   riskScore = Math.min(1.0, riskScore);
 
+  const dominantSide = buyVolume >= sellVolume ? "YES" : "NO";
+  const sideRatio = totalVolume > 0 ? Math.max(buyVolume, sellVolume) / totalVolume : 0.5;
+
   const analysis = {
     freshWalletCount,
     freshWalletVolume: Math.round(freshWalletVolume),
     topWalletShare: Math.round(topWalletShare * 100) / 100,
     whaleCount,
     totalVolume: Math.round(totalVolume),
+    buyVolume: Math.round(buyVolume),
+    sellVolume: Math.round(sellVolume),
+    dominantSide,
+    sideRatio: Math.round(sideRatio * 100) / 100,
     uniqueWallets: walletVolumes.size,
     walletRiskScore: Math.round(riskScore * 100) / 100,
     freshWallets: freshWallets.slice(0, 5),
