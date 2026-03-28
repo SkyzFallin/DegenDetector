@@ -88,7 +88,15 @@ export async function fetchAllMarkets() {
     fetchKalshiMarkets(60),
   ]);
 
-  const all = [...poly, ...kalshi];
+  // Deduplicate by name — keep the highest-volume version of same-named markets
+  const byName = new Map();
+  for (const m of [...poly, ...kalshi]) {
+    const existing = byName.get(m.name);
+    if (!existing || m.totalVolume24h > existing.totalVolume24h) {
+      byName.set(m.name, m);
+    }
+  }
+  const all = [...byName.values()];
 
   // Update bins for each market + flag warmup status
   for (const m of all) {
