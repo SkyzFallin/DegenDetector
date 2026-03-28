@@ -82,6 +82,8 @@ function formatTelegramMessage(alert) {
   const susLabel = alert.suspicion >= 80 ? "EXTREME" : alert.suspicion >= 60 ? "HIGH" : alert.suspicion >= 40 ? "ELEVATED" : "LOW";
   const priceStr = `${(alert.price * 100).toFixed(1)}¢`;
   const changeStr = `${alert.priceChange >= 0 ? "+" : ""}${(alert.priceChange * 100).toFixed(1)}¢`;
+  const direction = alert.priceChange >= 0 ? "YES" : "NO";
+  const dirEmoji = alert.priceChange >= 0 ? "📈" : "📉";
   const h = alert.expiryHours;
   const expiryStr = h != null ? (h < 0.05 ? "CLOSED" : h < 1 ? `${Math.round(h * 60)}m left` : h < 24 ? `${Math.round(h)}h left` : `${Math.round(h / 24)}d left`) : "unknown";
   const flagStr = alert.flags.map((f) => `${f.icon} ${f.text}`).join("\n");
@@ -90,10 +92,9 @@ function formatTelegramMessage(alert) {
     ``,
     `*Market:* ${alert.marketName}`,
     `*Venue:* ${alert.venue}`,
+    `${dirEmoji} *Buying:* ${direction} — YES price ${priceStr} (${changeStr})`,
     `*Suspicion:* ${alert.suspicion}/100 (${susLabel})`,
-    `*Price:* ${priceStr} (${changeStr})`,
     `*Expires:* ${expiryStr}`,
-    `*Z-Score:* ${alert.robustZ}`,
     `*Severity:* ${alert.severity.toUpperCase()}`,
     ``,
     flagStr,
