@@ -40,7 +40,7 @@ export function robustZ(val, win) {
 
 /**
  * @param {object} market - must have: bins, priceChange, leakProb, hasRecentNews
- *   Optional: price (current YES price 0-1), baselinePrice (median price over baseline window)
+ *   Optional: price, baselinePrice, walletRisk (from wallet intelligence layer)
  * @param {number|null} atTime - optional timestamp (ms) for historical analysis;
  *   if null, uses current UTC time for off-hours detection
  */
@@ -50,45 +50,46 @@ export function computeSuspicion(market, atTime = null) {
   const last5 = bins.slice(-5);
   const prev10 = bins.slice(-15, -5);
 
-  // 1. Spike suddenness (0-20)
+  // 1. Spike suddenness (0-18)
   const recentAvg = last5.reduce((a, b) => a + b, 0) / (last5.length || 1);
   const baseAvg = Math.max(1, prev10.reduce((a, b) => a + b, 0) / (prev10.length || 1));
-  const suddenness = clamp((recentAvg / baseAvg - 1) / 4, 0, 20);
+  const suddenness = clamp((recentAvg / baseAvg - 1) / 4, 0, 18);
 
-  // 2. Z-score magnitude (0-15)
-  const zScore = clamp(z / 12, 0, 1) * 15;
+  // 2. Z-score magnitude (0-12)
+  const zScore = clamp(z / 12, 0, 1) * 12;
 
-  // 3. Directional conviction (0-15)
-  const conviction = clamp(Math.abs(market.priceChange) / 0.10, 0, 1) * 15;
+  // 3. Directional conviction (0-12)
+  const conviction = clamp(Math.abs(market.priceChange) / 0.10, 0, 1) * 12;
 
-  // 4. Price flip (0-15) — THE degen detector
-  // Measures how far the price has moved from its baseline.
-  // A market flipping from 5¢ → 90¢ is someone who KNOWS the outcome.
-  // Compare current price to baseline median; a 50¢+ shift = max score.
+  // 4. Price flip (0-13) — THE degen detector
   const curPrice = market.price ?? null;
   const basePrice = market.baselinePrice ?? null;
-  let regimeShift = 0;
+  let priceFlip = 0;
   if (curPrice != null && basePrice != null) {
     const shift = Math.abs(curPrice - basePrice);
-    // Only count shifts that move TOWARD certainty (0 or 1), not just noise
-    const towardCertainty = Math.max(curPrice, 1 - curPrice); // how close to 0 or 1
-    const hasVolume = recentAvg > baseAvg * 2; // only score if accompanied by volume
+    const towardCertainty = Math.max(curPrice, 1 - curPrice);
+    const hasVolume = recentAvg > baseAvg * 2;
     if (hasVolume) {
-      regimeShift = clamp(shift / 0.50, 0, 1) * 15 * clamp(towardCertainty / 0.80, 0, 1);
+      priceFlip = clamp(shift / 0.50, 0, 1) * 13 * clamp(towardCertainty / 0.80, 0, 1);
     }
   }
 
-  // 5. Leak probability of market type (0-15)
-  const leakComponent = (market.leakProb || 0.5) * 15;
+  // 5. Leak probability of market type (0-12)
+  const leakComponent = (market.leakProb || 0.5) * 12;
 
-  // 6. Off-hours bonus (0-10) — uses atTime for historical, current time for live
+  // 6. Off-hours bonus (0-8)
   const hour = atTime ? new Date(atTime).getUTCHours() : new Date().getUTCHours();
-  const offHours = (hour >= 22 || hour <= 6) ? 10 : (hour >= 20 || hour <= 8) ? 5 : 0;
+  const offHours = (hour >= 22 || hour <= 6) ? 8 : (hour >= 20 || hour <= 8) ? 4 : 0;
 
   // 7. No-news flag (0-10)
   const noNews = market.hasRecentNews ? 0 : 10;
 
-  return Math.round(clamp(suddenness + zScore + conviction + regimeShift + leakComponent + offHours + noNews, 0, 100));
+  // 8. Wallet risk (0-15) — from on-chain wallet intelligence
+  // walletRisk is { walletRiskScore: 0-1 } from wallets.js, or null for non-Polymarket
+  const wr = market.walletRisk;
+  const walletScore = wr ? wr.walletRiskScore * 15 : 0;
+
+  return Math.round(clamp(suddenness + zScore + conviction + priceFlip + leakComponent + offHours + noNews + walletScore, 0, 100));
 }
 
 export function susColor(score) {
@@ -127,5 +128,16 @@ export function analyzeSpike(market) {
     flags.push({ icon: "🔀", text: `Price flip toward ${dir}`, detail: `${Math.round(shift * 100)}¢ move from baseline — someone may know the outcome` });
   }
   if (bins.at(-1) > (market.baseVolume || 1) * 50) flags.push({ icon: "🐋", text: "Whale-sized print", detail: `${bins.at(-1)} contracts — ${Math.round(bins.at(-1) / (market.baseVolume || 1))}x normal` });
+  // Wallet intelligence flags (Polymarket only)
+  const wr = market.walletRisk;
+  if (wr && wr.freshWalletCount > 0) {
+    flags.push({ icon: "🕵️", text: `${wr.freshWalletCount} fresh wallet${wr.freshWalletCount > 1 ? "s" : ""} trading`, detail: `$${wr.freshWalletVolume.toLocaleString()} from wallets with <5 lifetime txns — possible sockpuppets` });
+  }
+  if (wr && wr.topWalletShare > 0.4) {
+    flags.push({ icon: "💰", text: `${Math.round(wr.topWalletShare * 100)}% volume from one wallet`, detail: `Single wallet dominates trading — concentrated informed bet` });
+  }
+  if (wr && wr.whaleCount >= 2) {
+    flags.push({ icon: "🐳", text: `${wr.whaleCount} whale trades ($1K+)`, detail: `Large positions being established — ${wr.whaleCount} trades over $1,000` });
+  }
   return flags;
 }

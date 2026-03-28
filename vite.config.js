@@ -25,6 +25,16 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/telegram/, ""),
       },
+      "/api/polydata": {
+        target: "https://data-api.polymarket.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/polydata/, ""),
+      },
+      "/api/polygon": {
+        target: "https://polygon-bor-rpc.publicnode.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/polygon/, ""),
+      },
     },
   },
 });
