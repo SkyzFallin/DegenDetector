@@ -3,8 +3,9 @@
 // checks wallet freshness via Polygon RPC. Produces a wallet
 // risk assessment for each market.
 
-const POLYDATA_BASE = "/api/polydata";
-const POLYGON_RPC = "/api/polygon";
+// Call these APIs directly — both have CORS: Access-Control-Allow-Origin: *
+const POLYDATA_BASE = "https://data-api.polymarket.com";
+const POLYGON_RPC = "https://polygon.drpc.org";
 const FETCH_TIMEOUT = 10000;
 
 // ─── Caches ─────────────────────────────────────────────────
