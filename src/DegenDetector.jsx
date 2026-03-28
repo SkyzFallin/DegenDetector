@@ -328,9 +328,10 @@ function DetailPanel({ market }) {
         {/* Breakdown bars */}
         <div style={{ display: "flex", gap: 3, marginBottom: 10 }}>
           {[
-            { label: "Suddenness", val: (() => { const r5 = bins.slice(-5); const p10 = bins.slice(-15,-5); const ra = r5.reduce((a,b)=>a+b,0)/(r5.length||1); const ba = Math.max(1,p10.reduce((a,b)=>a+b,0)/(p10.length||1)); return clamp((ra/ba-1)/4,0,25); })(), max: 25, col: C.danger },
-            { label: "Z-Score", val: clamp(z / 12, 0, 1) * 20, max: 20, col: C.warning },
-            { label: "Conviction", val: clamp(Math.abs(market.priceChange) / 0.10, 0, 1) * 20, max: 20, col: C.blue },
+            { label: "Suddenness", val: (() => { const r5 = bins.slice(-5); const p10 = bins.slice(-15,-5); const ra = r5.reduce((a,b)=>a+b,0)/(r5.length||1); const ba = Math.max(1,p10.reduce((a,b)=>a+b,0)/(p10.length||1)); return clamp((ra/ba-1)/4,0,20); })(), max: 20, col: C.danger },
+            { label: "Z-Score", val: clamp(z / 12, 0, 1) * 15, max: 15, col: C.warning },
+            { label: "Conviction", val: clamp(Math.abs(market.priceChange) / 0.10, 0, 1) * 15, max: 15, col: C.blue },
+            { label: "Regime Shift", val: (() => { const cp = market.price, bp = market.baselinePrice; if (cp == null || bp == null) return 0; const r5 = bins.slice(-5); const p10 = bins.slice(-15,-5); const ra = r5.reduce((a,b)=>a+b,0)/(r5.length||1); const ba = Math.max(1,p10.reduce((a,b)=>a+b,0)/(p10.length||1)); if (ra <= ba * 2) return 0; return clamp(Math.abs(cp-bp)/0.50,0,1)*15*clamp(Math.max(cp,1-cp)/0.80,0,1); })(), max: 15, col: "#ff44ff" },
             { label: "Leak Prob", val: (market.leakProb || 0.5) * 15, max: 15, col: C.poly },
             { label: "Off-hrs", val: (() => { const hr = new Date().getUTCHours(); return (hr >= 22 || hr <= 6) ? 10 : (hr >= 20 || hr <= 8) ? 5 : 0; })(), max: 10, col: C.kalshi },
             { label: "No News", val: market.hasRecentNews ? 0 : 10, max: 10, col: C.neon },
