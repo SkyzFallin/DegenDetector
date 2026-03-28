@@ -100,6 +100,7 @@ export default function HistoryView() {
   const [annotations, setAnnotations] = useState([]);
   const [annoText, setAnnoText] = useState("");
   const [annoTime, setAnnoTime] = useState("");
+  const [zoomHours, setZoomHours] = useState(null); // null = show all data
 
   // ─── Search ───────────────────────────────────────────────
   const doSearch = useCallback(async () => {
@@ -222,16 +223,27 @@ export default function HistoryView() {
     }).filter(Boolean);
   }, [spikes, annotations]);
 
-  // ─── Chart data (downsample if too many points) ───────────
+  // ─── Chart data (zoom + downsample) ────────────────────────
   const chartData = useMemo(() => {
-    if (!scoredData) return [];
-    // For ranges > 2 days, downsample to 5-min bins
-    if (scoredData.length > 2880) {
-      const step = Math.ceil(scoredData.length / 1440);
-      return scoredData.filter((_, i) => i % step === 0);
+    if (!scoredData || scoredData.length === 0) return [];
+    let data = scoredData;
+
+    // Apply zoom: center on close time (or last annotation, or end of data)
+    if (zoomHours) {
+      const closeAnno = annotations.find((a) => a.auto);
+      const centerTs = closeAnno ? closeAnno.ts : data[data.length - 1].ts;
+      const halfWindow = zoomHours * 3600000 / 2;
+      data = data.filter((d) => d.ts >= centerTs - halfWindow && d.ts <= centerTs + halfWindow / 4);
+      if (data.length === 0) data = scoredData; // fallback
     }
-    return scoredData;
-  }, [scoredData]);
+
+    // Downsample if still too many points
+    if (data.length > 1440) {
+      const step = Math.ceil(data.length / 1440);
+      return data.filter((_, i) => i % step === 0);
+    }
+    return data;
+  }, [scoredData, zoomHours, annotations]);
 
   const ss = { background: C.bgCard, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px", fontSize: 11, outline: "none", fontFamily: "inherit" };
 
@@ -297,7 +309,7 @@ export default function HistoryView() {
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: selected.venue === "Polymarket" ? `${C.poly}14` : `${C.kalshi}14`, color: selected.venue === "Polymarket" ? C.poly : C.kalshi, fontWeight: 700, textTransform: "uppercase" }}>{selected.venue}</span>
               <span style={{ fontSize: 12, fontWeight: 600, color: C.text, flex: 1 }}>{selected.name}</span>
-              <button onClick={() => { setSelected(null); setScoredData(null); setSpikes([]); setAnnotations([]); }}
+              <button onClick={() => { setSelected(null); setScoredData(null); setSpikes([]); setAnnotations([]); setZoomHours(null); }}
                 style={{ background: "none", border: "none", color: C.textDim, cursor: "pointer", fontSize: 14 }}>✕</button>
             </div>
           )}
@@ -349,6 +361,29 @@ export default function HistoryView() {
                     {spikes.length} spike{spikes.length > 1 ? "s" : ""} detected
                   </span>
                 )}
+              </div>
+
+              {/* Zoom controls */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ display: "flex", gap: 3, alignItems: "center" }}>
+                  <span style={{ fontSize: 9, color: C.textDim, marginRight: 4 }}>Zoom:</span>
+                  {[
+                    { label: "30m", h: 0.5 },
+                    { label: "1h", h: 1 },
+                    { label: "2h", h: 2 },
+                    { label: "4h", h: 4 },
+                    { label: "8h", h: 8 },
+                    { label: "All", h: null },
+                  ].map((z) => (
+                    <button key={z.label} onClick={() => setZoomHours(z.h)}
+                      style={{ padding: "3px 8px", fontSize: 9, fontWeight: 700, background: zoomHours === z.h ? C.neonDim : "transparent", color: zoomHours === z.h ? C.neon : C.textMuted, border: `1px solid ${zoomHours === z.h ? C.neon + "33" : C.border}`, borderRadius: 4, cursor: "pointer" }}>
+                      {z.label}
+                    </button>
+                  ))}
+                </div>
+                <span style={{ fontSize: 9, color: C.textDim }}>
+                  {chartData.length} points · centered on {annotations.find((a) => a.auto) ? "close time" : "data end"}
+                </span>
               </div>
 
               {/* Legend */}
