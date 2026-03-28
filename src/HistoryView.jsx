@@ -501,9 +501,11 @@ export default function HistoryView() {
                   const avgPrice = prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : 0.5;
                   // For YES winners: profit = contracts × (1 - avg_price_paid)
                   // For NO winners: profit = contracts × avg_yes_price (since they bought NO cheap)
+                  const costPerContract = winSide === "yes" ? avgPrice : (1 - avgPrice);
                   const profitPerContract = winSide === "yes" ? (1 - avgPrice) : avgPrice;
+                  const amountWagered = Math.round(winVol * costPerContract);
                   const estProfit = Math.round(winVol * profitPerContract);
-                  return { ...w, winVol, loseVol, total, avgPrice, estProfit, pct: total > 0 ? Math.round((winVol / total) * 100) : 0 };
+                  return { ...w, winVol, loseVol, total, avgPrice, costPerContract, profitPerContract, amountWagered, estProfit, pct: total > 0 ? Math.round((winVol / total) * 100) : 0 };
                 });
 
                 const best = analyses.find((a) => a.winVol > 0 && a.pct > 55) || analyses[2]; // default to 1h
@@ -523,7 +525,8 @@ export default function HistoryView() {
                           <div style={{ fontSize: 8, color: C.textDim, marginBottom: 3 }}>Last {a.label}</div>
                           <div style={{ fontSize: 14, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: a.pct > 55 ? C.danger : C.text }}>{a.winVol.toLocaleString()}</div>
                           <div style={{ fontSize: 8, color: winColor }}>winning {winSide.toUpperCase()} buys</div>
-                          <div style={{ fontSize: 8, color: C.textDim, marginTop: 2 }}>{a.pct}% of all volume</div>
+                          <div style={{ fontSize: 9, fontWeight: 700, fontFamily: "'Azeret Mono', monospace", color: C.textMuted, marginTop: 2 }}>${a.amountWagered.toLocaleString()} wagered</div>
+                          <div style={{ fontSize: 8, color: a.pct > 55 ? C.danger : C.textDim }}>{a.pct}% of volume → ${a.estProfit.toLocaleString()} profit</div>
                         </div>
                       ))}
                     </div>
