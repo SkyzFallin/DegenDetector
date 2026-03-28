@@ -94,7 +94,7 @@ export function computeSuspicion(market, atTime = null) {
 export function susColor(score) {
   if (score >= 80) return SUS_COLORS.sus100;
   if (score >= 60) return SUS_COLORS.sus80;
-  if (score >= 40) return SUS_COLORS.sus60;
+  if (score >= 40) return SUS_COLORS.sus40;
   if (score >= 20) return SUS_COLORS.sus20;
   return SUS_COLORS.sus0;
 }
