@@ -15,6 +15,52 @@ const fmtTs = (ts) => new Date(ts).toLocaleString("en-US", { month: "short", day
 const fmtDuration = (mins) => mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 11));
 
+// ─── Preset Case Studies ────────────────────────────────────
+// Real examples of suspected insider trading on prediction markets.
+// These pre-fill the search, date range, and news annotation.
+const PRESETS = [
+  {
+    label: "US Strikes Iran (Mar 2026)",
+    description: "Massive volume spike on Iran-related markets hours before the US military strike was publicly announced",
+    search: "iran",
+    venue: "Kalshi",
+    dateStart: "2026-03-14T00:00",
+    dateEnd: "2026-03-16T00:00",
+    newsHeadline: "US launches airstrikes on Iran",
+    newsTime: "2026-03-15T04:30",
+  },
+  {
+    label: "Strait of Hormuz / Oil Price",
+    description: "Oil markets moved before public reports about Strait of Hormuz shipping disruptions",
+    search: "oil",
+    venue: "Kalshi",
+    dateStart: "2026-03-12T00:00",
+    dateEnd: "2026-03-15T00:00",
+    newsHeadline: "Strait of Hormuz shipping halted",
+    newsTime: "2026-03-13T18:00",
+  },
+  {
+    label: "Pope Francis Death",
+    description: "Betting markets on next Pope surged before official announcement of Pope Francis's passing",
+    search: "pope",
+    venue: "Kalshi",
+    dateStart: "2026-03-20T00:00",
+    dateEnd: "2026-03-23T00:00",
+    newsHeadline: "Pope Francis has died, Vatican confirms",
+    newsTime: "2026-03-21T12:00",
+  },
+  {
+    label: "Fed Rate Decision",
+    description: "Volume surges on rate cut/hike markets before FOMC meeting conclusions are announced",
+    search: "fed rate",
+    venue: "Kalshi",
+    dateStart: "2026-03-18T00:00",
+    dateEnd: "2026-03-20T00:00",
+    newsHeadline: "Fed holds rates steady at March FOMC",
+    newsTime: "2026-03-19T18:00",
+  },
+];
+
 export default function HistoryView() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -108,6 +154,27 @@ export default function HistoryView() {
     setAnnotations((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
+  // ─── Load a case study preset ──────────────────────────────
+  const loadPreset = useCallback(async (preset) => {
+    setQuery(preset.search);
+    setDateRange({ start: preset.dateStart, end: preset.dateEnd });
+    setAnnotations([{ id: uid(), text: preset.newsHeadline, ts: new Date(preset.newsTime).getTime() }]);
+    setScoredData(null);
+    setSpikes([]);
+    setSelected(null);
+    // Trigger search
+    setSearching(true);
+    setError(null);
+    try {
+      const res = await searchMarkets(preset.search);
+      setResults(res);
+      if (res.length === 0) setError("No markets found — try adjusting the search.");
+    } catch (e) {
+      setError("Search failed.");
+    }
+    setSearching(false);
+  }, []);
+
   // ─── Quick date presets ───────────────────────────────────
   const setPreset = (hours) => {
     const end = new Date();
@@ -174,7 +241,8 @@ export default function HistoryView() {
                   onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
                   <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: m.venue === "Polymarket" ? `${C.poly}14` : `${C.kalshi}14`, color: m.venue === "Polymarket" ? C.poly : C.kalshi, fontWeight: 700, textTransform: "uppercase" }}>{m.venue}</span>
                   <span style={{ fontSize: 11, color: C.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</span>
-                  <span style={{ fontSize: 9, color: C.textDim }}>{m.status}</span>
+                  {m.endDate && <span style={{ fontSize: 9, color: C.textDim, fontFamily: "'Azeret Mono', monospace", flexShrink: 0 }}>{new Date(m.endDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}</span>}
+                  <span style={{ fontSize: 9, color: m.status === "active" ? C.neon : C.textDim, fontWeight: 600 }}>{m.status}</span>
                 </div>
               ))}
             </div>
@@ -370,14 +438,36 @@ export default function HistoryView() {
           </>
         )}
 
-        {/* Empty state */}
-        {!selected && !loading && (
-          <div style={{ padding: 50, textAlign: "center", color: C.textDim, background: C.bgCard, borderRadius: 12, border: `1px solid ${C.border}` }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>🔬</div>
-            <div style={{ fontSize: 13, marginBottom: 6 }}>Search for a market to analyze historical trading patterns</div>
-            <div style={{ fontSize: 10, maxWidth: 400, margin: "0 auto", lineHeight: 1.5 }}>
-              The spike scanner runs our suspicion algorithm retroactively across historical trade data.
-              Add news annotations to measure the gap between volume spikes and public information — proving insider activity.
+        {/* Empty state + Presets */}
+        {!selected && !loading && results.length === 0 && (
+          <div style={{ background: C.bgCard, borderRadius: 12, border: `1px solid ${C.border}`, overflow: "hidden" }}>
+            <div style={{ padding: "30px 30px 16px", textAlign: "center" }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>🔬</div>
+              <div style={{ fontSize: 13, color: C.text, marginBottom: 6 }}>Search for a market or start with a known case study</div>
+              <div style={{ fontSize: 10, color: C.textDim, maxWidth: 400, margin: "0 auto", lineHeight: 1.5 }}>
+                The spike scanner runs our suspicion algorithm retroactively across historical trade data.
+                Add news annotations to measure the gap between volume spikes and public information.
+              </div>
+            </div>
+            <div style={{ padding: "0 14px 14px" }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, paddingLeft: 4 }}>
+                Case Studies — Known Insider Activity Signals
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {PRESETS.map((p, i) => (
+                  <div key={i} onClick={() => loadPreset(p)}
+                    style={{ padding: "10px 12px", background: C.bgElevated, border: `1px solid ${C.border}`, borderRadius: 8, cursor: "pointer", transition: "border-color 0.15s" }}
+                    onMouseEnter={(e) => e.currentTarget.style.borderColor = C.neon + "44"}
+                    onMouseLeave={(e) => e.currentTarget.style.borderColor = C.border}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 4 }}>{p.label}</div>
+                    <div style={{ fontSize: 10, color: C.textMuted, lineHeight: 1.4 }}>{p.description}</div>
+                    <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                      <span style={{ fontSize: 8, padding: "2px 5px", borderRadius: 3, background: p.venue === "Polymarket" ? `${C.poly}14` : `${C.kalshi}14`, color: p.venue === "Polymarket" ? C.poly : C.kalshi, fontWeight: 700 }}>{p.venue}</span>
+                      <span style={{ fontSize: 8, color: C.textDim }}>{p.dateStart.slice(0, 10)} → {p.dateEnd.slice(0, 10)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
