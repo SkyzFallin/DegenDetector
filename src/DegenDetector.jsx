@@ -186,9 +186,10 @@ function StatCard({ label, value, sub, color = C.text, icon }) {
 }
 
 function MarketRow({ market, isSelected, onClick, onPin }) {
-  const z = robustZ(market.bins.at(-1), market.bins);
-  const hot = z > 4;
-  const sus = computeSuspicion(market);
+  const warming = market._warmup;
+  const z = warming ? 0 : robustZ(market.bins.at(-1), market.bins);
+  const hot = !warming && z > 4;
+  const sus = warming ? 0 : computeSuspicion(market);
   return (
     <div onClick={onClick} style={{
       display: "grid", gridTemplateColumns: "minmax(0,1.5fr) 56px 62px 64px 90px 44px",
@@ -224,7 +225,7 @@ function MarketRow({ market, isSelected, onClick, onPin }) {
         <Sparkline data={market.bins.slice(-20)} hot={hot} />
       </div>
       <div style={{ textAlign: "right" }}>
-        <span style={{ fontSize: 11, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: z > 6 ? C.danger : z > 4 ? C.warning : C.textDim }}>{z.toFixed(1)}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: warming ? C.textDim : z > 6 ? C.danger : z > 4 ? C.warning : C.textDim }}>{warming ? "—" : z.toFixed(1)}</span>
       </div>
     </div>
   );
@@ -508,7 +509,7 @@ export default function DegenDetector() {
       if (filter.venue !== "all" && m.venue !== filter.venue) return false;
       if (filter.categories.size > 0 && !filter.categories.has(m.category)) return false;
       if (filter.search && !m.name.toLowerCase().includes(filter.search.toLowerCase())) return false;
-      if (filter.minSus > 0 && computeSuspicion(m) < filter.minSus) return false;
+      if (filter.minSus > 0 && (m._warmup || computeSuspicion(m) < filter.minSus)) return false;
       return true;
     }).sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
@@ -523,7 +524,8 @@ export default function DegenDetector() {
   const selected = markets.find((m) => m.id === selectedId);
   const unacked = alerts.filter((a) => !a.acked).length;
   const highSus = alerts.filter((a) => a.suspicion >= 60).length;
-  const avgSus = markets.length > 0 ? Math.round(markets.reduce((s, m) => s + computeSuspicion(m), 0) / markets.length) : 0;
+  const readyMarkets = markets.filter((m) => !m._warmup);
+  const avgSus = readyMarkets.length > 0 ? Math.round(readyMarkets.reduce((s, m) => s + computeSuspicion(m), 0) / readyMarkets.length) : 0;
   const ss = { background: C.bgCard, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 6px", fontSize: 10, cursor: "pointer", outline: "none" };
 
   return (

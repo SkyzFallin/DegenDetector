@@ -90,9 +90,10 @@ export async function fetchAllMarkets() {
 
   const all = [...poly, ...kalshi];
 
-  // Update bins for each market
+  // Update bins for each market + flag warmup status
   for (const m of all) {
     m.bins = updateBins(m.id, m.totalVolume24h, m.baseVolume);
+    m._warmup = !isAlertEligible(m.id);
   }
 
   // Sort by 24h volume descending
