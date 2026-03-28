@@ -524,7 +524,6 @@ export default function DegenDetector() {
   useEffect(() => {
     if (loading) return;
     const iv = setInterval(async () => {
-      if (frozenRef.current) return;
       tickRef.current += 1;
       try {
         const updated = await refreshMarkets(marketsRef.current, favIdsRef.current);
@@ -629,8 +628,7 @@ export default function DegenDetector() {
   const ss = { background: C.bgCard, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 6px", fontSize: 10, cursor: "pointer", outline: "none" };
 
   return (
-    <div onMouseEnter={() => { frozenRef.current = true; }} onMouseLeave={() => { frozenRef.current = false; }}
-      style={{ fontFamily: "'Space Grotesk', system-ui, sans-serif", background: C.bg, color: C.text, height: "100vh", display: "flex", flexDirection: "column", fontSize: 13 }}>
+    <div style={{ fontFamily: "'Space Grotesk', system-ui, sans-serif", background: C.bg, color: C.text, height: "100vh", display: "flex", flexDirection: "column", fontSize: 13 }}>
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: ${C.bg}; } ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 3px; }

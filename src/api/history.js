@@ -208,7 +208,7 @@ export function binKalshiTrades(trades, startTs, endTs) {
   // instead of null (which causes connectNulls to draw misleading diagonals)
   let lastPrice = null;
   return bins.map((b) => {
-    if (b.tradeCount > 0) lastPrice = b.priceSum / b.volume;
+    if (b.tradeCount > 0 && b.volume > 0) lastPrice = b.priceSum / b.volume;
     return {
       ts: b.ts,
       volume: Math.round(b.volume),

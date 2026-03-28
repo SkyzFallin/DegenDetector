@@ -69,8 +69,9 @@ function restoreBinCache() {
         lastVolume: saved.lastVolume,
         lastBinTs: Date.now(),
         lastBinIdx: nowIdx,
-        // Restore poll count so warmup is already satisfied
+        // Warmup already satisfied; _skipNextDelta discards the first stale volume delta
         pollCount: Math.max(saved.pollCount, MIN_POLLS_FOR_ALERTING),
+        _skipNextDelta: true,
       });
     }
   } catch {
@@ -103,7 +104,11 @@ function updateBins(marketId, currentVolume, baseVolume) {
   state.pollCount += 1;
 
   // If we've moved to a new bin, zero out skipped bins
-  if (nowIdx !== state.lastBinIdx) {
+  const binsSkipped = (nowIdx - state.lastBinIdx + BIN_COUNT) % BIN_COUNT;
+  if (binsSkipped > 0) {
+    // If gap is huge (>= full window), we've been inactive too long — skip the delta
+    const gapTooLarge = binsSkipped >= BIN_COUNT - 1;
+    if (gapTooLarge) state._skipNextDelta = true;
     let idx = (state.lastBinIdx + 1) % BIN_COUNT;
     while (idx !== nowIdx) {
       state.bins[idx] = 0;
@@ -114,11 +119,12 @@ function updateBins(marketId, currentVolume, baseVolume) {
   }
 
   // Accumulate volume delta into current bin
-  // Skip the very first poll — the initial delta is meaningless (not a real spike)
-  if (state.pollCount > 1) {
+  // Skip the very first poll, post-restore poll, or post-gap poll
+  if (state.pollCount > 1 && !state._skipNextDelta) {
     const delta = Math.max(0, currentVolume - state.lastVolume);
     state.bins[nowIdx] += delta;
   }
+  state._skipNextDelta = false;
   state.lastVolume = currentVolume;
   saveBinCache();
 
@@ -192,7 +198,7 @@ export async function refreshMarkets(existingMarkets, favoriteIds = new Set()) {
         ...m,
         pinned: prev.pinned,
         // Calculate price change from our last known price (0 is a valid value)
-        priceChange: m.price !== prev.price ? m.price - prev.price : m.priceChange,
+        priceChange: m.price !== prev.price ? m.price - prev.price : 0,
         // Track the first price we saw for this market — used for price flip detection
         baselinePrice: prev.baselinePrice ?? prev.price,
         // Track when market closed (negative expiry)
