@@ -16,6 +16,8 @@ const FETCH_TIMEOUT = 15000;
 let _kalshiEventCache = null;
 let _kalshiCacheTs = 0;
 const CACHE_TTL = 300000; // 5 min
+let _kalshiSettledCache = null;
+let _kalshiSettledCacheTs = 0;
 
 export async function searchMarkets(keyword) {
   if (!keyword || keyword.length < 2) return [];
@@ -27,41 +29,59 @@ export async function searchMarkets(keyword) {
   return [...poly, ...kalshi];
 }
 
+async function fetchKalshiEvents(status, cache, cacheTs) {
+  if (cache.data && Date.now() - cache.ts < CACHE_TTL) return cache.data;
+  try {
+    const res = await fetch(`${KALSHI_BASE}/events?limit=200&status=${status}&with_nested_markets=true`, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    cache.data = data.events || [];
+    cache.ts = Date.now();
+    return cache.data;
+  } catch { return []; }
+}
+
+const _openCache = { data: null, ts: 0 };
+const _settledCache = { data: null, ts: 0 };
+
 async function searchKalshi(kw) {
   try {
-    // Cache the events list to avoid hammering the API
-    if (!_kalshiEventCache || Date.now() - _kalshiCacheTs > CACHE_TTL) {
-      const res = await fetch(`${KALSHI_BASE}/events?limit=200&with_nested_markets=true`, {
-        signal: AbortSignal.timeout(FETCH_TIMEOUT),
-      });
-      if (!res.ok) return [];
-      const data = await res.json();
-      _kalshiEventCache = data.events || [];
-      _kalshiCacheTs = Date.now();
-    }
+    // Fetch both open and settled events in parallel
+    const [openEvents, settledEvents] = await Promise.all([
+      fetchKalshiEvents("open", _openCache),
+      fetchKalshiEvents("settled", _settledCache),
+    ]);
+    const allEvents = [...settledEvents, ...openEvents]; // settled first — historical is the focus
 
     const results = [];
-    for (const ev of _kalshiEventCache) {
+    for (const ev of allEvents) {
+      const evTitle = ev.title || "";
+      const evMatch = evTitle.toLowerCase().includes(kw);
       const markets = ev.markets || [];
       for (const m of markets) {
-        const title = m.title || ev.title || "";
-        if (title.toLowerCase().includes(kw) || (m.ticker || "").toLowerCase().includes(kw)) {
+        const title = m.title || evTitle || "";
+        if (evMatch || title.toLowerCase().includes(kw) || (m.ticker || "").toLowerCase().includes(kw)) {
           results.push({
             id: m.ticker,
             venue: "Kalshi",
-            name: title.length < 100 ? title : ev.title || title.slice(0, 80),
+            name: title.length < 100 ? title : evTitle || title.slice(0, 80),
             ticker: m.ticker,
             eventTicker: ev.ticker,
             category: classifyCategory(`${title} ${ev.category || ""}`),
             status: m.status || "unknown",
             endDate: m.expiration_time || m.close_time,
+            volume: parseFloat(m.volume_fp) || 0,
           });
         }
-        if (results.length >= 30) break;
+        if (results.length >= 50) break;
       }
-      if (results.length >= 30) break;
+      if (results.length >= 50) break;
     }
-    return results;
+    // Sort by volume so highest-activity markets appear first
+    results.sort((a, b) => (b.volume || 0) - (a.volume || 0));
+    return results.slice(0, 30);
   } catch (err) {
     console.error("[History] Kalshi search failed:", err);
     return [];
@@ -70,12 +90,14 @@ async function searchKalshi(kw) {
 
 async function searchPoly(kw) {
   try {
-    const res = await fetch(`${POLY_BASE}/markets?limit=100&active=true&closed=false&order=volume24hr&ascending=false`, {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT),
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    const markets = Array.isArray(data) ? data : [];
+    // Fetch both active and closed markets in parallel
+    const [activeRes, closedRes] = await Promise.all([
+      fetch(`${POLY_BASE}/markets?limit=100&active=true&closed=false&order=volume24hr&ascending=false`, { signal: AbortSignal.timeout(FETCH_TIMEOUT) }),
+      fetch(`${POLY_BASE}/markets?limit=100&closed=true&order=volume24hr&ascending=false`, { signal: AbortSignal.timeout(FETCH_TIMEOUT) }),
+    ]);
+    const activeData = activeRes.ok ? await activeRes.json() : [];
+    const closedData = closedRes.ok ? await closedRes.json() : [];
+    const markets = [...(Array.isArray(closedData) ? closedData : []), ...(Array.isArray(activeData) ? activeData : [])];
 
     return markets
       .filter((m) => (m.question || "").toLowerCase().includes(kw) || (m.slug || "").toLowerCase().includes(kw))
