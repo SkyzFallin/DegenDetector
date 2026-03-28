@@ -97,8 +97,8 @@ export async function refreshMarkets(existingMarkets) {
       return {
         ...m,
         pinned: prev.pinned,
-        // Calculate price change from our last known price
-        priceChange: m.price - prev.price || m.priceChange,
+        // Calculate price change from our last known price (0 is a valid value)
+        priceChange: m.price !== prev.price ? m.price - prev.price : m.priceChange,
       };
     }
     return m;

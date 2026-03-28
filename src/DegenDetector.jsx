@@ -40,20 +40,18 @@ const CATEGORIES = ["Regulatory", "Political", "Financial", "Legal", "Geopolitic
 // Markets are now fetched live from Polymarket + Kalshi APIs
 
 // ─── Utilities ──────────────────────────────────────────────────
-const uid = () => Math.random().toString(36).substr(2, 9);
-const pick = (a) => a[Math.floor(Math.random() * a.length)];
-const rand = (lo, hi) => lo + Math.random() * (hi - lo);
+const uid = () => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-// genBins removed — bins now come from live volume accumulator
-
 function median(a) {
+  if (a.length === 0) return 0;
   const s = [...a].sort((x, y) => x - y);
   const m = Math.floor(s.length / 2);
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
 function mad(a) {
+  if (a.length === 0) return 0;
   const med = median(a);
   return median(a.map((v) => Math.abs(v - med)));
 }
@@ -76,9 +74,9 @@ function computeSuspicion(market) {
   const prev10 = bins.slice(-15, -5);
 
   // 1. Spike suddenness (0-25): ratio of recent to baseline
-  // Needs 10x+ to start scoring, 50x+ for max
-  const recentAvg = last5.reduce((a, b) => a + b, 0) / last5.length;
-  const baseAvg = Math.max(1, prev10.reduce((a, b) => a + b, 0) / prev10.length);
+  // Scores linearly from 1x to 101x (ratio-1 / 4, clamped to 25)
+  const recentAvg = last5.reduce((a, b) => a + b, 0) / (last5.length || 1);
+  const baseAvg = Math.max(1, prev10.reduce((a, b) => a + b, 0) / (prev10.length || 1));
   const suddenness = clamp((recentAvg / baseAvg - 1) / 4, 0, 25);
 
   // 2. Z-score magnitude (0-20)
@@ -156,9 +154,18 @@ const fmtP = (p) => `${(p * 100).toFixed(1)}¢`;
 const fmtExpiry = (h) => h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`;
 
 // ─── Sound ──────────────────────────────────────────────────────
+let _audioCtx = null;
+function getAudioCtx() {
+  if (!_audioCtx || _audioCtx.state === "closed") {
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (_audioCtx.state === "suspended") _audioCtx.resume();
+  return _audioCtx;
+}
+
 function playAlertSound(severity) {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = getAudioCtx();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain); gain.connect(ctx.destination); osc.type = "sine";
@@ -237,15 +244,18 @@ function ExpiryBadge({ hours }) {
   return (<span style={{ fontSize: 9, fontWeight: 600, fontFamily: "'Azeret Mono', monospace", color: col, padding: "1px 5px", borderRadius: 4, background: urgent ? C.dangerDim : "transparent", animation: urgent ? "pulse 1s infinite" : "none" }}>{fmtExpiry(hours)}</span>);
 }
 
+let _sparkId = 0;
 function Sparkline({ data, color = C.neon, h = 28, w = 90, hot = false }) {
+  const gradId = useMemo(() => `sp-${++_sparkId}`, []);
+  if (!data || data.length < 2) return <svg width={w} height={h} />;
   const max = Math.max(...data, 1);
   const pts = data.map((v, i) => ({ x: (i / (data.length - 1)) * w, y: h - (v / max) * (h - 4) - 2 }));
   const d = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
   const col = hot ? C.danger : color;
   return (
     <svg width={w} height={h} style={{ display: "block" }}>
-      <defs><linearGradient id={`sp-${col.replace("#", "")}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={col} stopOpacity="0.25" /><stop offset="100%" stopColor={col} stopOpacity="0" /></linearGradient></defs>
-      <path d={`${d} L${w},${h} L0,${h} Z`} fill={`url(#sp-${col.replace("#", "")})`} />
+      <defs><linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={col} stopOpacity="0.25" /><stop offset="100%" stopColor={col} stopOpacity="0" /></linearGradient></defs>
+      <path d={`${d} L${w},${h} L0,${h} Z`} fill={`url(#${gradId})`} />
       <path d={d} fill="none" stroke={col} strokeWidth="1.5" strokeLinejoin="round" />
       {hot && pts.length > 0 && (<circle cx={pts.at(-1).x} cy={pts.at(-1).y} r="3" fill={col} stroke={C.bg} strokeWidth="1.5"><animate attributeName="r" values="3;5;3" dur="1.2s" repeatCount="indefinite" /></circle>)}
     </svg>
@@ -402,11 +412,11 @@ function DetailPanel({ market }) {
         {/* Breakdown bars */}
         <div style={{ display: "flex", gap: 3, marginBottom: 10 }}>
           {[
-            { label: "Suddenness", val: clamp((robustZ(bins.at(-1), bins) > 3 ? 25 : 5), 0, 25), max: 25, col: C.danger },
-            { label: "Z-Score", val: clamp(z / 12 * 20, 0, 20), max: 20, col: C.warning },
-            { label: "Conviction", val: clamp(Math.abs(market.priceChange) / 0.10 * 20, 0, 20), max: 20, col: C.blue },
-            { label: "Leak Prob", val: market.leakProb * 15, max: 15, col: C.poly },
-            { label: "Off-hrs", val: (new Date().getHours() >= 22 || new Date().getHours() <= 6) ? 10 : 0, max: 10, col: C.kalshi },
+            { label: "Suddenness", val: (() => { const r5 = bins.slice(-5); const p10 = bins.slice(-15,-5); const ra = r5.reduce((a,b)=>a+b,0)/(r5.length||1); const ba = Math.max(1,p10.reduce((a,b)=>a+b,0)/(p10.length||1)); return clamp((ra/ba-1)/4,0,25); })(), max: 25, col: C.danger },
+            { label: "Z-Score", val: clamp(z / 12, 0, 1) * 20, max: 20, col: C.warning },
+            { label: "Conviction", val: clamp(Math.abs(market.priceChange) / 0.10, 0, 1) * 20, max: 20, col: C.blue },
+            { label: "Leak Prob", val: (market.leakProb || 0.5) * 15, max: 15, col: C.poly },
+            { label: "Off-hrs", val: (() => { const hr = new Date().getHours(); return (hr >= 22 || hr <= 6) ? 10 : (hr >= 20 || hr <= 8) ? 5 : 0; })(), max: 10, col: C.kalshi },
             { label: "No News", val: market.hasRecentNews ? 0 : 10, max: 10, col: C.neon },
           ].map((c) => (
             <div key={c.label} style={{ flex: c.max, display: "flex", flexDirection: "column", gap: 2 }}>
@@ -477,6 +487,10 @@ export default function DegenDetector() {
   const [loading, setLoading] = useState(true);
   const tickRef = useRef(0);
   const frozenRef = useRef(false);
+  const marketsRef = useRef(markets);
+  const soundOnRef = useRef(soundOn);
+  useEffect(() => { marketsRef.current = markets; }, [markets]);
+  useEffect(() => { soundOnRef.current = soundOn; }, [soundOn]);
 
   // ─── Initial fetch ──────────────────────────────────────────
   useEffect(() => {
@@ -499,13 +513,14 @@ export default function DegenDetector() {
   }, []);
 
   // ─── Polling loop: refresh every 10s ────────────────────────
+  // Uses refs to avoid tearing down/recreating the interval on every state change
   useEffect(() => {
     if (loading) return;
     const iv = setInterval(async () => {
       if (frozenRef.current) return;
       tickRef.current += 1;
       try {
-        const updated = await refreshMarkets(markets);
+        const updated = await refreshMarkets(marketsRef.current);
         setMarkets(updated);
 
         // Check for alerts on updated data
@@ -529,21 +544,20 @@ export default function DegenDetector() {
                 if (pa.find((a) => a.marketId === m.id && Date.now() - a.timestamp < 900000)) return pa;
                 const type = ratio >= 50 ? "whale_print" : "volume_spike";
                 const alert = createAlert(m, z, cur, type);
-                if (soundOn) playAlertSound(alert.severity);
+                if (soundOnRef.current) playAlertSound(alert.severity);
                 return [alert, ...pa].slice(0, 50);
               });
             }
           }
         });
 
-        // Update connection status
         setConn({ polymarket: "live", kalshi: "live" });
       } catch (err) {
         console.error("[DegenDetector] refresh failed:", err);
       }
-    }, 10000); // Poll every 10 seconds
+    }, 10000);
     return () => clearInterval(iv);
-  }, [loading, markets, soundOn]);
+  }, [loading]); // stable deps — reads from refs
 
   const ackAlert = useCallback((id) => setAlerts((p) => p.map((a) => a.id === id ? { ...a, acked: true } : a)), []);
   const togglePin = useCallback((id) => setMarkets((p) => p.map((m) => m.id === id ? { ...m, pinned: !m.pinned } : m)), []);
@@ -568,14 +582,13 @@ export default function DegenDetector() {
   const selected = markets.find((m) => m.id === selectedId);
   const unacked = alerts.filter((a) => !a.acked).length;
   const highSus = alerts.filter((a) => a.suspicion >= 60).length;
-  const avgSus = Math.round(markets.reduce((s, m) => s + computeSuspicion(m), 0) / markets.length);
+  const avgSus = markets.length > 0 ? Math.round(markets.reduce((s, m) => s + computeSuspicion(m), 0) / markets.length) : 0;
   const ss = { background: C.bgCard, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 6px", fontSize: 10, cursor: "pointer", outline: "none" };
 
   return (
     <div onMouseEnter={() => { frozenRef.current = true; }} onMouseLeave={() => { frozenRef.current = false; }}
       style={{ fontFamily: "'Space Grotesk', system-ui, sans-serif", background: C.bg, color: C.text, minHeight: "100vh", display: "flex", flexDirection: "column", fontSize: 13 }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Azeret+Mono:wght@400;500;600;700;800&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: ${C.bg}; } ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 3px; }
         @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }

@@ -6,6 +6,7 @@
 import { classifyCategory, LEAK_PROBS } from "./categories.js";
 
 const BASE = "/api/kalshi";
+const FETCH_TIMEOUT = 8000;
 
 // Skip sports/entertainment — we want political, financial, geopolitical
 const SKIP_CATEGORIES = new Set(["Sports", "Entertainment"]);
@@ -17,7 +18,7 @@ const SKIP_CATEGORIES = new Set(["Sports", "Entertainment"]);
 export async function fetchKalshiMarkets(limit = 60) {
   try {
     const url = `${BASE}/events?limit=100&status=open&with_nested_markets=true`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT) });
     if (!res.ok) throw new Error(`Kalshi ${res.status}`);
     const data = await res.json();
     const events = data.events || [];
