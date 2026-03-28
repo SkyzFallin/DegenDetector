@@ -61,12 +61,9 @@ const _settledCache = { data: null, ts: 0 };
 
 async function searchKalshi(kw) {
   try {
-    // Fetch both open and settled events in parallel
-    const [openEvents, settledEvents] = await Promise.all([
-      fetchKalshiEvents("open", _openCache),
-      fetchKalshiEvents("settled", _settledCache),
-    ]);
-    const allEvents = [...settledEvents, ...openEvents]; // settled first — historical is the focus
+    // Only fetch settled events — history tab is for retroactive analysis of resolved markets
+    const settledEvents = await fetchKalshiEvents("settled", _settledCache);
+    const allEvents = settledEvents;
 
     const results = [];
     for (const ev of allEvents) {
@@ -112,14 +109,10 @@ async function searchKalshi(kw) {
 
 async function searchPoly(kw) {
   try {
-    // Fetch both active and closed markets in parallel
-    const [activeRes, closedRes] = await Promise.all([
-      fetch(`${POLY_BASE}/markets?limit=100&active=true&closed=false&order=volume24hr&ascending=false`, { signal: AbortSignal.timeout(FETCH_TIMEOUT) }),
-      fetch(`${POLY_BASE}/markets?limit=100&closed=true&order=volume24hr&ascending=false`, { signal: AbortSignal.timeout(FETCH_TIMEOUT) }),
-    ]);
-    const activeData = activeRes.ok ? await activeRes.json() : [];
+    // Only fetch closed markets — history tab is for retroactive analysis of resolved markets
+    const closedRes = await fetch(`${POLY_BASE}/markets?limit=100&closed=true&order=volume24hr&ascending=false`, { signal: AbortSignal.timeout(FETCH_TIMEOUT) });
     const closedData = closedRes.ok ? await closedRes.json() : [];
-    const markets = [...(Array.isArray(closedData) ? closedData : []), ...(Array.isArray(activeData) ? activeData : [])];
+    const markets = Array.isArray(closedData) ? closedData : [];
 
     return markets
       .filter((m) => (m.question || "").toLowerCase().includes(kw) || (m.slug || "").toLowerCase().includes(kw))
@@ -135,7 +128,7 @@ async function searchPoly(kw) {
           tokenId: tokenIds[0] || null,
           conditionId: m.conditionId,
           category: classifyCategory(m.question + " " + (m.slug || ""), m.events),
-          status: m.closed ? "closed" : "active",
+          status: "closed",
           endDate: m.endDate,
         };
       });
