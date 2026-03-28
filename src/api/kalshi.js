@@ -21,11 +21,14 @@ export async function fetchKalshiMarkets(limit = 60) {
     const events = data.events || [];
 
     const results = [];
+    const MAX_PER_EVENT = 3; // cap per event to avoid 15 Pope candidates drowning everything
     for (const event of events) {
       const markets = event.markets || [];
-      for (const m of markets) {
-        const mapped = mapKalshi(m, event);
-        if (mapped) results.push(mapped);
+      // Sort by volume within event so we get the most active sub-markets
+      const mapped = markets.map((m) => mapKalshi(m, event)).filter(Boolean);
+      mapped.sort((a, b) => b.totalVolume24h - a.totalVolume24h);
+      for (const m of mapped.slice(0, MAX_PER_EVENT)) {
+        results.push(m);
         if (results.length >= limit) break;
       }
       if (results.length >= limit) break;
