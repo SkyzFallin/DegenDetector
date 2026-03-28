@@ -53,7 +53,7 @@ function createAlert(market, z, vol, type = "volume_spike") {
     venue: market.venue, category: market.category, type,
     severity: z > 12 ? "critical" : z > 10 ? "high" : "medium",
     robustZ: Math.round(z * 10) / 10, volume: vol,
-    price: market.price, priceChange: market.priceChange,
+    price: market.price, priceChange: market.priceChange, expiryHours: market.expiryHours,
     suspicion: computeSuspicion(market), flags: analyzeSpike(market),
     timestamp: Date.now(), baselineMedian: Math.round(median(market.bins)),
     baselineMAD: Math.round(mad(market.bins) * 10) / 10, acked: false,
@@ -82,6 +82,8 @@ function formatTelegramMessage(alert) {
   const susLabel = alert.suspicion >= 80 ? "EXTREME" : alert.suspicion >= 60 ? "HIGH" : alert.suspicion >= 40 ? "ELEVATED" : "LOW";
   const priceStr = `${(alert.price * 100).toFixed(1)}¢`;
   const changeStr = `${alert.priceChange >= 0 ? "+" : ""}${(alert.priceChange * 100).toFixed(1)}¢`;
+  const h = alert.expiryHours;
+  const expiryStr = h != null ? (h < 0.05 ? "CLOSED" : h < 1 ? `${Math.round(h * 60)}m left` : h < 24 ? `${Math.round(h)}h left` : `${Math.round(h / 24)}d left`) : "unknown";
   const flagStr = alert.flags.map((f) => `${f.icon} ${f.text}`).join("\n");
   return [
     `🚨 *DEGEN DETECTED*`,
@@ -90,6 +92,7 @@ function formatTelegramMessage(alert) {
     `*Venue:* ${alert.venue}`,
     `*Suspicion:* ${alert.suspicion}/100 (${susLabel})`,
     `*Price:* ${priceStr} (${changeStr})`,
+    `*Expires:* ${expiryStr}`,
     `*Z-Score:* ${alert.robustZ}`,
     `*Severity:* ${alert.severity.toUpperCase()}`,
     ``,
@@ -298,6 +301,7 @@ function AlertCard({ alert, onAck }) {
             <VenueBadge venue={alert.venue} />
             <CatBadge cat={alert.category} />
             <span style={{ fontSize: 10, color: C.textMuted }}>{ago(alert.timestamp)} ago</span>
+            {alert.expiryHours != null && <span style={{ fontSize: 9, fontWeight: 700, fontFamily: "'Azeret Mono', monospace", color: alert.expiryHours < 1 ? C.danger : alert.expiryHours < 6 ? C.warning : C.textDim, padding: "1px 4px", background: alert.expiryHours < 1 ? C.dangerDim : "transparent", borderRadius: 3 }}>{alert.expiryHours < 0.05 ? "CLOSED" : fmtExpiry(alert.expiryHours)}</span>}
           </div>
           <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 3 }}>{alert.marketName}</div>
           <div style={{ fontSize: 11, color: C.textMuted }}>
