@@ -256,10 +256,15 @@ export default function HistoryView() {
 
   // ─── Load a case study preset ──────────────────────────────
   const loadPreset = useCallback(async (preset) => {
-    const dr = { start: preset.dateStart, end: preset.dateEnd };
+    // Preset times are UTC strings — convert to local time for datetime-local inputs
+    const utcToLocal = (utcStr) => {
+      const d = new Date(utcStr + "Z");
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}T${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    };
+    const dr = { start: utcToLocal(preset.dateStart), end: utcToLocal(preset.dateEnd) };
     setQuery(preset.search);
     setDateRange(dr);
-    const newsAnno = { id: uid(), text: preset.newsHeadline, ts: new Date(preset.newsTime).getTime() };
+    const newsAnno = { id: uid(), text: preset.newsHeadline, ts: new Date(preset.newsTime + "Z").getTime() };
     setAnnotations([newsAnno]);
     setScoredData(null);
     setSpikes([]);
