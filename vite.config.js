@@ -5,6 +5,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
+      "/api/polydata": {
+        target: "https://data-api.polymarket.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/polydata/, ""),
+      },
       "/api/poly": {
         target: "https://gamma-api.polymarket.com",
         changeOrigin: true,
@@ -24,11 +29,6 @@ export default defineConfig({
         target: "https://api.telegram.org",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/telegram/, ""),
-      },
-      "/api/polydata": {
-        target: "https://data-api.polymarket.com",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/polydata/, ""),
       },
       "/api/polygon": {
         target: "https://polygon-bor-rpc.publicnode.com",
