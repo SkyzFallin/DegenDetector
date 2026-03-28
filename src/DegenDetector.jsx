@@ -185,7 +185,7 @@ function StatCard({ label, value, sub, color = C.text, icon }) {
   );
 }
 
-function MarketRow({ market, isSelected, onClick, onPin }) {
+function MarketRow({ market, isSelected, onClick, onPin, onFav, isFav }) {
   const warming = market._warmup;
   const z = warming ? 0 : robustZ(market.bins.at(-1), market.bins);
   const hot = !warming && z > 4;
@@ -201,6 +201,7 @@ function MarketRow({ market, isSelected, onClick, onPin }) {
        onMouseLeave={(e) => { if (!isSelected) e.currentTarget.style.background = "transparent"; }}>
       <div style={{ minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
+          <button onClick={(e) => { e.stopPropagation(); onFav(market); }} title={isFav ? "Remove from favorites" : "Add to favorites"} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 11, color: isFav ? C.warning : C.textDim, flexShrink: 0 }}>{isFav ? "★" : "☆"}</button>
           <button onClick={(e) => { e.stopPropagation(); onPin(market.id); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: 11, color: market.pinned ? C.neon : C.textDim, flexShrink: 0 }}>{market.pinned ? "📌" : "·"}</button>
           {hot && <span style={{ fontSize: 8, animation: "pulse 0.8s infinite", flexShrink: 0 }}>🔥</span>}
           {!market.hasRecentNews && sus > 40 && <span style={{ fontSize: 8, flexShrink: 0 }} title="No correlated news">🔇</span>}
@@ -402,6 +403,9 @@ export default function DegenDetector() {
   const [fetchError, setFetchError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [monitoringSince] = useState(() => Date.now());
+  const [favorites, setFavorites] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("dd_favorites") || "[]"); } catch { return []; }
+  });
   const tickRef = useRef(0);
   const frozenRef = useRef(false);
   const marketsRef = useRef(markets);
@@ -492,6 +496,18 @@ export default function DegenDetector() {
 
   const ackAlert = useCallback((id) => setAlerts((p) => p.map((a) => a.id === id ? { ...a, acked: true } : a)), []);
   const togglePin = useCallback((id) => setMarkets((p) => p.map((m) => m.id === id ? { ...m, pinned: !m.pinned } : m)), []);
+  const toggleFavorite = useCallback((market) => {
+    setFavorites((prev) => {
+      const exists = prev.find((f) => f.id === market.id);
+      const next = exists ? prev.filter((f) => f.id !== market.id) : [...prev, {
+        id: market.id, name: market.name, venue: market.venue, category: market.category,
+        addedAt: Date.now(),
+      }];
+      try { localStorage.setItem("dd_favorites", JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
+  const isFavorite = useCallback((id) => favorites.some((f) => f.id === id), [favorites]);
   const manualRefresh = useCallback(async () => {
     try {
       const updated = await refreshMarkets(marketsRef.current);
@@ -566,9 +582,9 @@ export default function DegenDetector() {
           <button onClick={manualRefresh} title="Refresh now" style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.textMuted, borderRadius: 6, padding: "3px 7px", fontSize: 11, cursor: "pointer" }}>🔄</button>
           <button onClick={() => setSoundOn(!soundOn)} style={{ background: soundOn ? C.neonDim : "transparent", border: `1px solid ${soundOn ? C.neon + "33" : C.border}`, color: soundOn ? C.neon : C.textDim, borderRadius: 6, padding: "3px 7px", fontSize: 11, cursor: "pointer" }}>{soundOn ? "🔔" : "🔕"}</button>
           <div style={{ display: "flex", background: C.border, borderRadius: 6, padding: 2 }}>
-            {["dashboard", "alerts", "history"].map((v) => (
+            {["dashboard", "alerts", "favorites", "history"].map((v) => (
               <button key={v} onClick={() => setView(v)} style={{ padding: "4px 12px", fontSize: 10, fontWeight: 700, background: view === v ? C.bgCard : "transparent", color: view === v ? C.text : C.textMuted, border: "none", borderRadius: 4, cursor: "pointer", position: "relative", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                {v}{v === "alerts" && unacked > 0 && (<span style={{ position: "absolute", top: -3, right: -3, background: C.danger, color: "#fff", fontSize: 7, fontWeight: 800, padding: "1px 4px", borderRadius: 8, minWidth: 12, textAlign: "center", animation: "pulse 1s infinite" }}>{unacked}</span>)}
+                {v === "favorites" ? `★ ${favorites.length}` : v}{v === "alerts" && unacked > 0 && (<span style={{ position: "absolute", top: -3, right: -3, background: C.danger, color: "#fff", fontSize: 7, fontWeight: 800, padding: "1px 4px", borderRadius: 8, minWidth: 12, textAlign: "center", animation: "pulse 1s infinite" }}>{unacked}</span>)}
               </button>
             ))}
           </div>
@@ -615,12 +631,55 @@ export default function DegenDetector() {
               <span>Market</span><span>Sus</span><span style={{ textAlign: "right" }}>Price</span><span className="dd-col-vol" style={{ textAlign: "right" }}>Vol</span><span className="dd-col-spark" style={{ textAlign: "right" }}>Trend</span><span style={{ textAlign: "right" }}>Z</span>
             </div>
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {filtered.map((m) => (<MarketRow key={m.id} market={m} isSelected={m.id === selectedId} onClick={() => setSelectedId(m.id)} onPin={togglePin} />))}
+              {filtered.map((m) => (<MarketRow key={m.id} market={m} isSelected={m.id === selectedId} onClick={() => setSelectedId(m.id)} onPin={togglePin} onFav={toggleFavorite} isFav={isFavorite(m.id)} />))}
               {loading && (<div style={{ padding: 40, textAlign: "center", color: C.neon, animation: "pulse 1.5s infinite" }}>⏳ Loading live markets from Polymarket & Kalshi...</div>)}
               {!loading && filtered.length === 0 && (<div style={{ padding: 40, textAlign: "center", color: C.textDim }}>No markets match filters</div>)}
             </div>
           </div>
           <div className="dd-hide-mobile" style={{ flex: "1 1 44%", minWidth: 0, overflow: "hidden" }}><DetailPanel market={selected} /></div>
+        </div>
+      ) : view === "favorites" ? (
+        <div style={{ flex: 1, overflowY: "auto", padding: 14 }}>
+          <div style={{ maxWidth: 680, margin: "0 auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <h2 style={{ fontSize: 13, fontWeight: 800, color: C.text, textTransform: "uppercase", letterSpacing: "0.04em" }}>★ Watchlist</h2>
+              <span style={{ fontSize: 10, color: C.textMuted }}>{favorites.length} favorited · persists across sessions</span>
+            </div>
+            {favorites.length === 0 ? (
+              <div style={{ padding: 50, textAlign: "center", color: C.textDim, background: C.bgCard, borderRadius: 12, border: `1px solid ${C.border}` }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>★</div>
+                <p style={{ fontSize: 12 }}>No favorites yet. Click the ☆ star on any market in the Dashboard to add it here.</p>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {favorites.map((fav) => {
+                  const liveMarket = markets.find((m) => m.id === fav.id);
+                  return (
+                    <div key={fav.id} style={{ padding: "10px 14px", background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, display: "flex", alignItems: "center", gap: 10 }}>
+                      <button onClick={() => toggleFavorite(fav)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: C.warning }}>★</button>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                          <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: fav.venue === "Polymarket" ? `${C.poly}14` : `${C.kalshi}14`, color: fav.venue === "Polymarket" ? C.poly : C.kalshi, fontWeight: 700, textTransform: "uppercase" }}>{fav.venue}</span>
+                          <span style={{ fontSize: 9, padding: "2px 6px", background: C.border, borderRadius: 4, color: C.textDim }}>{fav.category}</span>
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fav.name}</div>
+                      </div>
+                      {liveMarket ? (
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: C.text }}>{(liveMarket.price * 100).toFixed(1)}¢</div>
+                          <div style={{ fontSize: 10, fontFamily: "'Azeret Mono', monospace", color: liveMarket.priceChange >= 0 ? C.neon : C.danger }}>{liveMarket.priceChange >= 0 ? "+" : ""}{(liveMarket.priceChange * 100).toFixed(1)}¢</div>
+                          {!liveMarket._warmup && <div style={{ fontSize: 9, color: susColor(computeSuspicion(liveMarket)), fontWeight: 700 }}>Sus: {computeSuspicion(liveMarket)}</div>}
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 9, color: C.textDim }}>Not live</span>
+                      )}
+                      <button onClick={() => { setSelectedId(fav.id); setView("dashboard"); }} style={{ padding: "4px 8px", fontSize: 9, fontWeight: 700, background: C.neonDim, color: C.neon, border: `1px solid ${C.neon}33`, borderRadius: 4, cursor: "pointer" }}>View</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <div style={{ flex: 1, overflowY: "auto", padding: 14 }}>
