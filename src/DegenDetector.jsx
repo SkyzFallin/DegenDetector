@@ -321,20 +321,53 @@ function AlertCard({ alert, onAck, market, onView }) {
       </div>
       {open && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
-          {/* Volume chart */}
-          {hasChart && (
+          {/* Volume + Spike + Suspicion */}
+          {hasChart && (() => {
+            const windowSize = 15;
+            const alertBins = bins.map((v, i) => {
+              if (i < windowSize) return { time: `${i - bins.length + 1}m`, volume: v, suspicion: 0 };
+              const window = bins.slice(i - windowSize, i);
+              const synth = { bins: [...window, v], priceChange: alert.priceChange, leakProb: market?.leakProb || 0.5, hasRecentNews: market?.hasRecentNews ?? true, category: market?.category, baseVolume: Math.max(1, window.reduce((a, b) => a + b, 0) / window.length), price: market?.price, baselinePrice: market?.baselinePrice };
+              return { time: `${i - bins.length + 1}m`, volume: v, suspicion: computeSuspicion(synth) };
+            });
+            const last20 = alertBins.slice(-20);
+            const closedMinAgo = market?._closedAt ? Math.round((Date.now() - market._closedAt) / 60000) : (market?.expiryHours < 0.05 ? 0 : null);
+            const closeLabel = closedMinAgo != null && closedMinAgo >= 0 && closedMinAgo <= 89 ? `${-closedMinAgo}m` : null;
+            return (
             <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>Volume / Minute</div>
-              <ResponsiveContainer width="100%" height={90}>
-                <AreaChart data={bins.map((v, i) => ({ time: `${i - bins.length + 1}m`, volume: v }))} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
-                  <XAxis dataKey="time" tick={{ fontSize: 7, fill: C.textDim }} axisLine={false} tickLine={false} interval={14} />
-                  <YAxis tick={{ fontSize: 7, fill: C.textDim }} axisLine={false} tickLine={false} width={24} />
+              {/* Volume bars */}
+              <div style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>Volume — 90m window</div>
+              <ResponsiveContainer width="100%" height={80}>
+                <BarChart data={alertBins} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+                  <XAxis dataKey="time" tick={{ fontSize: 6, fill: C.textDim }} axisLine={false} tickLine={false} interval={14} />
+                  <YAxis tick={{ fontSize: 6, fill: C.textDim }} axisLine={false} tickLine={false} width={22} />
                   <ReferenceLine y={Math.round(alertThreshold)} stroke={C.danger} strokeDasharray="3 3" />
-                  <Area type="monotone" dataKey="volume" stroke={dirColor} fill={dirColor} fillOpacity={0.15} strokeWidth={1.5} dot={false} />
-                </AreaChart>
+                  {closeLabel && <ReferenceLine x={closeLabel} stroke={C.warning} strokeWidth={2} strokeDasharray="4 2" label={{ value: "🔒", fill: C.warning, fontSize: 8, position: "top" }} />}
+                  <Bar dataKey="volume" radius={[1, 1, 0, 0]}>{alertBins.map((d, i) => (<Cell key={i} fill={dirColor} opacity={d.volume > alertThreshold ? 0.9 : 0.35} />))}</Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              {/* Suspicion heatmap strip */}
+              <div style={{ marginTop: 2, marginBottom: 6 }}>
+                <div style={{ fontSize: 7, color: C.textDim, marginBottom: 1 }}>SUSPICION</div>
+                <div style={{ display: "flex", height: 10, borderRadius: 2, overflow: "hidden" }}>
+                  {alertBins.map((d, i) => (
+                    <div key={i} style={{ flex: 1, background: d.suspicion > 20 ? susColor(d.suspicion) : C.border, opacity: d.suspicion > 20 ? 0.7 : 0.2 }}
+                      title={`${d.time}: Sus ${d.suspicion}`} />
+                  ))}
+                </div>
+              </div>
+              {/* Last 20 bins spike detail */}
+              <div style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>Last 20 Bins — Spike Detail</div>
+              <ResponsiveContainer width="100%" height={60}>
+                <BarChart data={last20} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+                  <XAxis dataKey="time" tick={{ fontSize: 6, fill: C.textDim }} axisLine={false} tickLine={false} interval={3} />
+                  <YAxis tick={{ fontSize: 6, fill: C.textDim }} axisLine={false} tickLine={false} width={22} />
+                  <ReferenceLine y={Math.round(alertThreshold)} stroke={C.danger} strokeDasharray="3 3" />
+                  <Bar dataKey="volume" radius={[1, 1, 0, 0]}>{last20.map((d, i) => (<Cell key={i} fill={d.volume > alertThreshold ? C.danger : dirColor} opacity={d.volume > alertThreshold ? 0.9 : 0.4} />))}</Bar>
+                </BarChart>
               </ResponsiveContainer>
             </div>
-          )}
+            ); })()}
           {alert.flags && alert.flags.length > 0 && (
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Why this looks suspicious</div>
