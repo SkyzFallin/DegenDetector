@@ -54,6 +54,7 @@ function createAlert(market, z, vol, type = "volume_spike") {
     severity: z > 12 ? "critical" : z > 10 ? "high" : "medium",
     robustZ: Math.round(z * 10) / 10, volume: vol,
     price: market.price, priceChange: market.priceChange, expiryHours: market.expiryHours,
+    walletRisk: market.walletRisk || null,
     suspicion: computeSuspicion(market), flags: analyzeSpike(market),
     timestamp: Date.now(), baselineMedian: Math.round(median(market.bins)),
     baselineMAD: Math.round(mad(market.bins) * 10) / 10, acked: false,
@@ -87,18 +88,23 @@ function formatTelegramMessage(alert) {
   const h = alert.expiryHours;
   const expiryStr = h != null ? (h < 0.05 ? "CLOSED" : h < 1 ? `${Math.round(h * 60)}m left` : h < 24 ? `${Math.round(h)}h left` : `${Math.round(h / 24)}d left`) : "unknown";
   const flagStr = alert.flags.map((f) => `${f.icon} ${f.text}`).join("\n");
+  const wr = alert.walletRisk;
+  const walletLine = wr && wr.totalVolume > 0 ? `*Side:* ${wr.dominantSide} dominates (${Math.round(wr.sideRatio * 100)}%) · $${wr.buyVolume.toLocaleString()} YES / $${wr.sellVolume.toLocaleString()} NO` : null;
+  const walletStats = wr && wr.uniqueWallets > 0 ? `*Wallets:* ${wr.uniqueWallets} traders · ${wr.freshWalletCount} fresh · ${wr.whaleCount} whales` : null;
   return [
     `🚨 *DEGEN DETECTED*`,
     ``,
     `*Market:* ${alert.marketName}`,
     `*Venue:* ${alert.venue}`,
     `${dirEmoji} *Buying:* ${direction} — YES price ${priceStr} (${changeStr})`,
+    walletLine,
+    walletStats,
     `*Suspicion:* ${alert.suspicion}/100 (${susLabel})`,
     `*Expires:* ${expiryStr}`,
     `*Severity:* ${alert.severity.toUpperCase()}`,
     ``,
     flagStr,
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 async function sendTelegramMessage(botToken, chatId, text) {
@@ -281,6 +287,11 @@ function MarketRow({ market, isSelected, onClick, onPin, onFav, isFav }) {
       </div>
       <div style={{ textAlign: "right" }}>
         <span style={{ fontSize: 11, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: warming ? C.textDim : activity > 5 ? C.danger : activity > 2 ? C.warning : C.textDim }}>{warming ? "—" : activity >= 10 ? `${Math.round(activity)}x` : activity >= 1.1 ? `${activity.toFixed(1)}x` : "—"}</span>
+        {market.walletRisk && market.walletRisk.totalVolume > 0 && (
+          <div style={{ fontSize: 8, fontWeight: 700, color: market.walletRisk.dominantSide === "YES" ? C.neon : "#ff88cc" }}>
+            {market.walletRisk.dominantSide} {Math.round(market.walletRisk.sideRatio * 100)}%
+          </div>
+        )}
       </div>
     </div>
   );
@@ -479,6 +490,16 @@ function DetailPanel({ market, telegramCfg }) {
               Risk: {Math.round(market.walletRisk.walletRiskScore * 100)}%
             </span>
           </div>
+          {/* Dominant side indicator */}
+          {market.walletRisk.totalVolume > 0 && (
+            <div style={{ display: "flex", gap: 4, marginBottom: 8, alignItems: "center" }}>
+              <div style={{ flex: market.walletRisk.buyVolume, height: 8, background: C.neon, borderRadius: "4px 0 0 4px", opacity: 0.7 }} />
+              <div style={{ flex: market.walletRisk.sellVolume || 0.01, height: 8, background: "#ff88cc", borderRadius: "0 4px 4px 0", opacity: 0.7 }} />
+              <span style={{ fontSize: 9, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: market.walletRisk.dominantSide === "YES" ? C.neon : "#ff88cc", flexShrink: 0, marginLeft: 4 }}>
+                {market.walletRisk.dominantSide} {Math.round(market.walletRisk.sideRatio * 100)}%
+              </span>
+            </div>
+          )}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 8 }}>
             <div style={{ textAlign: "center", padding: 6, background: C.bgElevated, borderRadius: 6 }}>
               <div style={{ fontSize: 14, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: C.text }}>{market.walletRisk.uniqueWallets}</div>
