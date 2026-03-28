@@ -280,7 +280,7 @@ function MarketRow({ market, isSelected, onClick, onPin, onFav, isFav }) {
       </div>
       <div style={{ textAlign: "right" }}>
         <div style={{ fontSize: 10, fontFamily: "'Azeret Mono', monospace", color: C.neon }}>{market.bestBid ? (market.bestBid * 100).toFixed(1) : "—"}</div>
-        <div style={{ fontSize: 10, fontFamily: "'Azeret Mono', monospace", color: "#ff88cc" }}>{market.bestAsk ? (market.bestAsk * 100).toFixed(1) : "—"}</div>
+        <div style={{ fontSize: 10, fontFamily: "'Azeret Mono', monospace", color: C.danger }}>{market.bestAsk ? (market.bestAsk * 100).toFixed(1) : "—"}</div>
         <div style={{ fontSize: 7, fontFamily: "'Azeret Mono', monospace", color: (market.spread || 0) > 0.05 ? C.warning : C.textDim }}>{((market.spread || 0) * 100).toFixed(1)}¢ spread</div>
       </div>
       <div className="dd-col-vol" style={{ textAlign: "right" }}>
