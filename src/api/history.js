@@ -4,7 +4,7 @@
 // Polymarket: price history via CLOB API (limited for resolved markets)
 
 import { classifyCategory, LEAK_PROBS } from "./categories.js";
-import { computeSuspicion, robustZ } from "../scoring.js";
+import { computeSuspicion, robustZ, median } from "../scoring.js";
 
 /**
  * Format a timestamp for chart x-axis labels. Includes date + time.
@@ -316,9 +316,14 @@ export function computeRetroactiveScores(bins, marketMeta) {
     // Heuristic: if there's a big price move AND volume, news likely drove it
     // Only flag "no news" when volume spikes WITHOUT a corresponding price move
     const hasNews = Math.abs(priceChange) > 0.02;
+    // Baseline price: median price over the lookback window
+    const windowPrices = bins.slice(i - windowSize, i).filter((b) => b.price != null).map((b) => b.price);
+    const baselinePrice = windowPrices.length > 0 ? median(windowPrices) : null;
     const syntheticMarket = {
       bins: [...window, currentVol],
       priceChange,
+      price: bin.price,
+      baselinePrice,
       leakProb,
       hasRecentNews: hasNews,
       category: marketMeta.category,

@@ -40,6 +40,7 @@ export function robustZ(val, win) {
 
 /**
  * @param {object} market - must have: bins, priceChange, leakProb, hasRecentNews
+ *   Optional: price (current YES price 0-1), baselinePrice (median price over baseline window)
  * @param {number|null} atTime - optional timestamp (ms) for historical analysis;
  *   if null, uses current UTC time for off-hours detection
  */
@@ -49,28 +50,45 @@ export function computeSuspicion(market, atTime = null) {
   const last5 = bins.slice(-5);
   const prev10 = bins.slice(-15, -5);
 
-  // 1. Spike suddenness (0-25)
+  // 1. Spike suddenness (0-20)
   const recentAvg = last5.reduce((a, b) => a + b, 0) / (last5.length || 1);
   const baseAvg = Math.max(1, prev10.reduce((a, b) => a + b, 0) / (prev10.length || 1));
-  const suddenness = clamp((recentAvg / baseAvg - 1) / 4, 0, 25);
+  const suddenness = clamp((recentAvg / baseAvg - 1) / 4, 0, 20);
 
-  // 2. Z-score magnitude (0-20)
-  const zScore = clamp(z / 12, 0, 1) * 20;
+  // 2. Z-score magnitude (0-15)
+  const zScore = clamp(z / 12, 0, 1) * 15;
 
-  // 3. Directional conviction (0-20)
-  const conviction = clamp(Math.abs(market.priceChange) / 0.10, 0, 1) * 20;
+  // 3. Directional conviction (0-15)
+  const conviction = clamp(Math.abs(market.priceChange) / 0.10, 0, 1) * 15;
 
-  // 4. Leak probability of market type (0-15)
+  // 4. Price regime shift (0-15) — THE degen detector
+  // Measures how far the price has moved from its baseline.
+  // A market flipping from 5¢ → 90¢ is someone who KNOWS the outcome.
+  // Compare current price to baseline median; a 50¢+ shift = max score.
+  const curPrice = market.price ?? null;
+  const basePrice = market.baselinePrice ?? null;
+  let regimeShift = 0;
+  if (curPrice != null && basePrice != null) {
+    const shift = Math.abs(curPrice - basePrice);
+    // Only count shifts that move TOWARD certainty (0 or 1), not just noise
+    const towardCertainty = Math.max(curPrice, 1 - curPrice); // how close to 0 or 1
+    const hasVolume = recentAvg > baseAvg * 2; // only score if accompanied by volume
+    if (hasVolume) {
+      regimeShift = clamp(shift / 0.50, 0, 1) * 15 * clamp(towardCertainty / 0.80, 0, 1);
+    }
+  }
+
+  // 5. Leak probability of market type (0-15)
   const leakComponent = (market.leakProb || 0.5) * 15;
 
-  // 5. Off-hours bonus (0-10) — uses atTime for historical, current time for live
+  // 6. Off-hours bonus (0-10) — uses atTime for historical, current time for live
   const hour = atTime ? new Date(atTime).getUTCHours() : new Date().getUTCHours();
   const offHours = (hour >= 22 || hour <= 6) ? 10 : (hour >= 20 || hour <= 8) ? 5 : 0;
 
-  // 6. No-news flag (0-10)
+  // 7. No-news flag (0-10)
   const noNews = market.hasRecentNews ? 0 : 10;
 
-  return Math.round(clamp(suddenness + zScore + conviction + leakComponent + offHours + noNews, 0, 100));
+  return Math.round(clamp(suddenness + zScore + conviction + regimeShift + leakComponent + offHours + noNews, 0, 100));
 }
 
 export function susColor(score) {
@@ -103,6 +121,11 @@ export function analyzeSpike(market) {
   const hour = new Date().getUTCHours();
   if (hour >= 22 || hour <= 6) flags.push({ icon: "🌙", text: "Off-hours activity", detail: "Spike during low-traffic window" });
   if (market.leakProb > 0.7) flags.push({ icon: "🔓", text: "High leak-probability market", detail: `${market.category} decisions often leak pre-announcement` });
+  if (market.price != null && market.baselinePrice != null && Math.abs(market.price - market.baselinePrice) > 0.20) {
+    const dir = market.price > market.baselinePrice ? "YES" : "NO";
+    const shift = Math.abs(market.price - market.baselinePrice);
+    flags.push({ icon: "🔀", text: `Price regime shift toward ${dir}`, detail: `${Math.round(shift * 100)}¢ move from baseline — someone may know the outcome` });
+  }
   if (bins.at(-1) > (market.baseVolume || 1) * 50) flags.push({ icon: "🐋", text: "Whale-sized print", detail: `${bins.at(-1)} contracts — ${Math.round(bins.at(-1) / (market.baseVolume || 1))}x normal` });
   return flags;
 }

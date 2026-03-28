@@ -120,9 +120,11 @@ export async function refreshMarkets(existingMarkets) {
         pinned: prev.pinned,
         // Calculate price change from our last known price (0 is a valid value)
         priceChange: m.price !== prev.price ? m.price - prev.price : m.priceChange,
+        // Track the first price we saw for this market — used for regime shift detection
+        baselinePrice: prev.baselinePrice ?? prev.price,
       };
     }
-    return m;
+    return { ...m, baselinePrice: m.price };
   });
 }
 
