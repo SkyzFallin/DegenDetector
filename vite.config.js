@@ -31,7 +31,7 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api\/telegram/, ""),
       },
       "/api/polygon": {
-        target: "https://polygon-bor-rpc.publicnode.com",
+        target: "https://polygon.drpc.org",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/polygon/, ""),
       },
