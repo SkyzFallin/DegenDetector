@@ -355,6 +355,12 @@ function DetailPanel({ market, telegramCfg }) {
   const chartData = bins.map((v, i) => ({ time: `${i - bins.length + 1}m`, volume: v }));
   const last20 = bins.slice(-20);
   const barData = last20.map((v, i) => ({ bin: `${i - 20 + 1}m`, vol: v, isSpike: v > threshold }));
+  // Calculate which bin the market closed at (for the close marker)
+  const closedMinAgo = market._closedAt ? Math.round((Date.now() - market._closedAt) / 60000) : (market.expiryHours < 0.05 ? 0 : null);
+  // 90m chart labels: "-89m" to "0m". closedMinAgo=5 → label "-5m"
+  const closeLabel90 = closedMinAgo != null && closedMinAgo >= 0 && closedMinAgo <= 89 ? `${-closedMinAgo}m` : null;
+  // 20-bin chart labels: "-19m" to "0m". closedMinAgo=5 → label "-5m"
+  const closeLabel20 = closedMinAgo != null && closedMinAgo >= 0 && closedMinAgo <= 19 ? `${-closedMinAgo}m` : null;
 
   return (
     <div style={{ padding: 14, overflowY: "auto", height: "100%" }}>
@@ -427,6 +433,7 @@ function DetailPanel({ market, telegramCfg }) {
             <Tooltip contentStyle={{ background: C.bgElevated, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 10, color: C.text }} />
             <ReferenceLine y={Math.round(threshold)} stroke={C.danger} strokeDasharray="4 4" label={{ value: "Spike", fill: C.danger, fontSize: 8, position: "insideTopRight" }} />
             <ReferenceLine y={Math.round(med)} stroke={C.textDim} strokeDasharray="2 4" />
+            {closeLabel90 && <ReferenceLine x={closeLabel90} stroke={C.warning} strokeWidth={2} strokeDasharray="4 2" label={{ value: "🔒 CLOSED", fill: C.warning, fontSize: 8, fontWeight: 700, position: "top" }} />}
             <Area type="monotone" dataKey="volume" stroke={dirColor} fill={`url(#${gradId})`} strokeWidth={1.5} dot={false} animationDuration={400} />
           </AreaChart>
         </ResponsiveContainer>
@@ -446,6 +453,7 @@ function DetailPanel({ market, telegramCfg }) {
             <XAxis dataKey="bin" tick={{ fontSize: 7, fill: C.textDim }} axisLine={false} tickLine={false} interval={3} />
             <YAxis tick={{ fontSize: 7, fill: C.textDim }} axisLine={false} tickLine={false} width={24} />
             <ReferenceLine y={Math.round(threshold)} stroke={C.danger} strokeDasharray="3 3" />
+            {closeLabel20 && <ReferenceLine x={closeLabel20} stroke={C.warning} strokeWidth={2} strokeDasharray="4 2" />}
             <Bar dataKey="vol" radius={[2, 2, 0, 0]}>{barData.map((d, i) => (<Cell key={i} fill={market.priceChange >= 0 ? C.neon : "#ff88cc"} opacity={d.isSpike ? 0.9 : 0.4} />))}</Bar>
           </BarChart>
         </ResponsiveContainer>
