@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(netstat -ano)",
+      "Bash(findstr 5173)",
+      "Bash(tasklist)",
+      "Bash(findstr 39668)",
+      "Bash(findstr \"LISTENING\")",
+      "Bash(findstr -v \"0.0.0.0:0\")"
+    ]
+  }
+}
