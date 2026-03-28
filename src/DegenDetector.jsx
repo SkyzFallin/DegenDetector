@@ -437,13 +437,14 @@ function DetailPanel({ market, telegramCfg }) {
         {/* Breakdown bars */}
         <div style={{ display: "flex", gap: 3, marginBottom: 10 }}>
           {[
-            { label: "Suddenness", val: (() => { const r5 = bins.slice(-5); const p10 = bins.slice(-15,-5); const ra = r5.reduce((a,b)=>a+b,0)/(r5.length||1); const ba = Math.max(1,p10.reduce((a,b)=>a+b,0)/(p10.length||1)); return clamp((ra/ba-1)/4,0,20); })(), max: 20, col: C.danger },
-            { label: "Z-Score", val: clamp(z / 12, 0, 1) * 15, max: 15, col: C.warning },
-            { label: "Conviction", val: clamp(Math.abs(market.priceChange) / 0.10, 0, 1) * 15, max: 15, col: C.blue },
-            { label: "Price Flip", val: (() => { const cp = market.price, bp = market.baselinePrice; if (cp == null || bp == null) return 0; const r5 = bins.slice(-5); const p10 = bins.slice(-15,-5); const ra = r5.reduce((a,b)=>a+b,0)/(r5.length||1); const ba = Math.max(1,p10.reduce((a,b)=>a+b,0)/(p10.length||1)); if (ra <= ba * 2) return 0; return clamp(Math.abs(cp-bp)/0.50,0,1)*15*clamp(Math.max(cp,1-cp)/0.80,0,1); })(), max: 15, col: "#ff44ff" },
-            { label: "Leak Prob", val: (market.leakProb || 0.5) * 15, max: 15, col: C.poly },
-            { label: "Off-hrs", val: (() => { const hr = new Date().getUTCHours(); return (hr >= 22 || hr <= 6) ? 10 : (hr >= 20 || hr <= 8) ? 5 : 0; })(), max: 10, col: C.kalshi },
+            { label: "Sudden", val: (() => { const r5 = bins.slice(-5); const p10 = bins.slice(-15,-5); const ra = r5.reduce((a,b)=>a+b,0)/(r5.length||1); const ba = Math.max(1,p10.reduce((a,b)=>a+b,0)/(p10.length||1)); return clamp((ra/ba-1)/4,0,18); })(), max: 18, col: C.danger },
+            { label: "Z-Score", val: clamp(z / 12, 0, 1) * 12, max: 12, col: C.warning },
+            { label: "Convict", val: clamp(Math.abs(market.priceChange) / 0.10, 0, 1) * 12, max: 12, col: C.blue },
+            { label: "Flip", val: (() => { const cp = market.price, bp = market.baselinePrice; if (cp == null || bp == null) return 0; const r5 = bins.slice(-5); const p10 = bins.slice(-15,-5); const ra = r5.reduce((a,b)=>a+b,0)/(r5.length||1); const ba = Math.max(1,p10.reduce((a,b)=>a+b,0)/(p10.length||1)); if (ra <= ba * 2) return 0; return clamp(Math.abs(cp-bp)/0.50,0,1)*13*clamp(Math.max(cp,1-cp)/0.80,0,1); })(), max: 13, col: "#ff44ff" },
+            { label: "Leak", val: (market.leakProb || 0.5) * 12, max: 12, col: C.poly },
+            { label: "Off-hrs", val: (() => { const hr = new Date().getUTCHours(); return (hr >= 22 || hr <= 6) ? 8 : (hr >= 20 || hr <= 8) ? 4 : 0; })(), max: 8, col: C.kalshi },
             { label: "No News", val: market.hasRecentNews ? 0 : 10, max: 10, col: C.neon },
+            { label: "Wallet", val: market.walletRisk ? market.walletRisk.walletRiskScore * 15 : 0, max: 15, col: "#ff6600" },
           ].map((c) => (
             <div key={c.label} style={{ flex: c.max, display: "flex", flexDirection: "column", gap: 2 }}>
               <div style={{ height: 6, borderRadius: 3, background: C.border, overflow: "hidden" }}>
@@ -467,6 +468,47 @@ function DetailPanel({ market, telegramCfg }) {
         <StatCard label="OI" value={fmtN(market.oi)} sub={`${market.oiChange >= 0 ? "+" : ""}${fmtN(market.oiChange)}`} icon="🎯" />
         <StatCard label="Leak Prob" value={`${Math.round(market.leakProb * 100)}%`} color={market.leakProb > 0.7 ? C.warning : C.textMuted} icon="🔓" />
       </div>
+
+      {/* Wallet Intelligence (Polymarket only) */}
+      {market.walletRisk && market.walletRisk.uniqueWallets > 0 && (
+        <div style={{ background: market.walletRisk.walletRiskScore > 0.4 ? `${C.danger}08` : C.bgCard, border: `1px solid ${market.walletRisk.walletRiskScore > 0.4 ? C.danger + "30" : C.border}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em" }}>🕵️ Wallet Activity</div>
+            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: "'Azeret Mono', monospace", color: market.walletRisk.walletRiskScore > 0.5 ? C.danger : market.walletRisk.walletRiskScore > 0.2 ? C.warning : C.textDim }}>
+              Risk: {Math.round(market.walletRisk.walletRiskScore * 100)}%
+            </span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 8 }}>
+            <div style={{ textAlign: "center", padding: 6, background: C.bgElevated, borderRadius: 6 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: C.text }}>{market.walletRisk.uniqueWallets}</div>
+              <div style={{ fontSize: 7, color: C.textDim }}>WALLETS</div>
+            </div>
+            <div style={{ textAlign: "center", padding: 6, background: market.walletRisk.freshWalletCount > 0 ? `${C.danger}15` : C.bgElevated, borderRadius: 6 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: market.walletRisk.freshWalletCount > 0 ? C.danger : C.text }}>{market.walletRisk.freshWalletCount}</div>
+              <div style={{ fontSize: 7, color: C.textDim }}>FRESH</div>
+            </div>
+            <div style={{ textAlign: "center", padding: 6, background: market.walletRisk.whaleCount > 0 ? `${C.warning}15` : C.bgElevated, borderRadius: 6 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: market.walletRisk.whaleCount > 0 ? C.warning : C.text }}>{market.walletRisk.whaleCount}</div>
+              <div style={{ fontSize: 7, color: C.textDim }}>WHALES</div>
+            </div>
+            <div style={{ textAlign: "center", padding: 6, background: market.walletRisk.topWalletShare > 0.4 ? `${C.warning}15` : C.bgElevated, borderRadius: 6 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: market.walletRisk.topWalletShare > 0.4 ? C.warning : C.text }}>{Math.round(market.walletRisk.topWalletShare * 100)}%</div>
+              <div style={{ fontSize: 7, color: C.textDim }}>TOP WALLET</div>
+            </div>
+          </div>
+          {market.walletRisk.freshWallets.length > 0 && (
+            <div style={{ fontSize: 9, color: C.textDim, borderTop: `1px solid ${C.border}`, paddingTop: 6 }}>
+              <div style={{ fontWeight: 700, color: C.danger, marginBottom: 3 }}>Fresh wallets:</div>
+              {market.walletRisk.freshWallets.map((fw, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
+                  <span style={{ fontFamily: "'Azeret Mono', monospace" }}>{fw.wallet.slice(0, 8)}...{fw.wallet.slice(-4)}{fw.name ? ` (${fw.name})` : ""}</span>
+                  <span style={{ fontFamily: "'Azeret Mono', monospace", color: C.danger }}>${fw.volume.toLocaleString()} · {fw.txCount} txns</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Volume chart */}
       {(() => { const dirColor = market.priceChange >= 0 ? C.neon : "#ff88cc"; const gradId = `vGrad-${market.id}`; return (

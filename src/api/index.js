@@ -4,6 +4,7 @@
 
 import { fetchPolymarkets } from "./polymarket.js";
 import { fetchKalshiMarkets } from "./kalshi.js";
+import { analyzeMarketWallets, pruneWalletCache } from "./wallets.js";
 
 // ─── Volume Bin Accumulator ──────────────────────────────────
 // Tracks per-market volume in 1-minute bins over a 90-minute window.
@@ -219,8 +220,35 @@ export async function refreshMarkets(existingMarkets, favoriteIds = new Set()) {
     }
   }
 
+  // Wallet intelligence: analyze top Polymarket markets (throttled to every 30s)
+  const now = Date.now();
+  if (now - _lastWalletScan > 30000) {
+    _lastWalletScan = now;
+    // Top 20 Polymarket markets by volume that have a conditionId
+    const polyMarkets = merged
+      .filter((m) => m.venue === "Polymarket" && m.conditionId && !m._closedAt)
+      .sort((a, b) => b.totalVolume24h - a.totalVolume24h)
+      .slice(0, 20);
+    // Fire-and-forget: don't block the refresh cycle
+    Promise.all(polyMarkets.map(async (m) => {
+      try {
+        const wr = await analyzeMarketWallets(m.conditionId);
+        if (wr) m.walletRisk = wr;
+      } catch {}
+    })).then(() => pruneWalletCache());
+  }
+  // Carry forward previous walletRisk data for markets not re-analyzed this cycle
+  for (const m of merged) {
+    if (!m.walletRisk) {
+      const prev = existingMap.get(m.id);
+      if (prev?.walletRisk) m.walletRisk = prev.walletRisk;
+    }
+  }
+
   return merged;
 }
+
+let _lastWalletScan = 0;
 
 /**
  * Clean up bin state for markets no longer tracked.
