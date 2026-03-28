@@ -43,40 +43,40 @@ function findClosestBinTime(ts, chartData) {
 const PRESETS = [
   {
     label: "Iran Supreme Leader Succession",
-    description: "Heavy trading on Iran leadership markets — search for the highest-volume ticker around key news dates",
-    search: "iran",
+    description: "Market closed at 21:44 UTC, settled 22:14. Look for volume spikes in the hours before close.",
+    search: "iran leader",
     venue: "Kalshi",
-    dateStart: "2026-03-07T00:00",
-    dateEnd: "2026-03-09T00:00",
-    newsHeadline: "Reports: Iran Supreme Leader health declining",
-    newsTime: "2026-03-08T20:00",
+    dateStart: "2026-03-08T12:00",
+    dateEnd: "2026-03-08T23:00",
+    newsHeadline: "New Supreme Leader confirmed",
+    newsTime: "2026-03-08T21:44",
   },
   {
-    label: "Next Pope Betting Surge",
-    description: "Papal succession markets saw massive volume — look for spikes preceding Vatican announcements",
-    search: "pope",
+    label: "Next Pope — Conclave Result",
+    description: "Betting closed at 17:26 UTC. Volume in the hours before = insiders who knew the conclave result.",
+    search: "next pope",
     venue: "Kalshi",
-    dateStart: "2025-05-07T00:00",
-    dateEnd: "2025-05-09T00:00",
-    newsHeadline: "Vatican announces Pope Francis passing",
-    newsTime: "2025-05-08T16:00",
+    dateStart: "2025-05-08T10:00",
+    dateEnd: "2025-05-08T18:30",
+    newsHeadline: "White smoke — new Pope elected",
+    newsTime: "2025-05-08T17:26",
   },
   {
-    label: "Fed Chair Nomination",
-    description: "Kevin Warsh Fed Chair nomination market saw 3,252-contract print — insider knowledge of White House decision?",
+    label: "Fed Chair Nomination — Warsh",
+    description: "3,252-contract whale print at 14:10 UTC. News broke ~15:00. One hour of insider advantage.",
     search: "fed chair",
     venue: "Kalshi",
-    dateStart: "2026-03-04T00:00",
-    dateEnd: "2026-03-06T00:00",
+    dateStart: "2026-03-05T08:00",
+    dateEnd: "2026-03-05T20:00",
     newsHeadline: "Trump to nominate Kevin Warsh as Fed Chair",
     newsTime: "2026-03-05T15:00",
   },
   {
     label: "US Forces Enter Iran",
-    description: "Polymarket Iran markets — check for volume activity before public announcements about military action",
+    description: "Polymarket Iran markets — check for volume activity before military action announcements",
     search: "iran",
     venue: "Polymarket",
-    dateStart: "2026-03-24T00:00",
+    dateStart: "2026-03-25T00:00",
     dateEnd: "2026-03-28T00:00",
     newsHeadline: "US forces enter Iran",
     newsTime: "2026-03-26T12:00",
@@ -262,9 +262,16 @@ export default function HistoryView() {
                     setResults([]);
                     // Auto-add close/settlement markers for settled Kalshi markets
                     const autoAnnotations = [];
-                    if (m.closeTime) autoAnnotations.push({ id: uid(), text: `Market closed${m.result ? ` (${m.result})` : ""}`, ts: new Date(m.closeTime).getTime(), auto: true });
-                    if (m.settlementTs) autoAnnotations.push({ id: uid(), text: "Market settled", ts: new Date(m.settlementTs).getTime(), auto: true });
+                    if (m.closeTime) autoAnnotations.push({ id: uid(), text: `Market closed${m.result ? ` — result: ${m.result.toUpperCase()}` : ""}`, ts: new Date(m.closeTime).getTime(), auto: true });
+                    if (m.settlementTs) autoAnnotations.push({ id: uid(), text: "Official settlement", ts: new Date(m.settlementTs).getTime(), auto: true });
                     if (autoAnnotations.length) setAnnotations((prev) => [...prev.filter((a) => !a.auto), ...autoAnnotations]);
+                    // Auto-zoom date range: 12 hours before close → 1 hour after
+                    if (m.closeTime) {
+                      const closeMs = new Date(m.closeTime).getTime();
+                      const start = new Date(closeMs - 12 * 3600000).toISOString().slice(0, 16);
+                      const end = new Date(closeMs + 1 * 3600000).toISOString().slice(0, 16);
+                      setDateRange({ start, end });
+                    }
                   }}
                   style={{ padding: "8px 12px", cursor: "pointer", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 8 }}
                   onMouseEnter={(e) => e.currentTarget.style.background = C.bgCardHover}
