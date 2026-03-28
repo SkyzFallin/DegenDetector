@@ -20,21 +20,24 @@ function getCurrentBinIndex() {
 // At 10s polling, 18 polls = ~3 minutes of baseline data.
 const MIN_POLLS_FOR_ALERTING = 18;
 
-function getOrCreateBinState(marketId, currentVolume) {
+function getOrCreateBinState(marketId, currentVolume, baseVolume) {
   if (!binStore.has(marketId)) {
+    // Pre-fill bins with estimated per-minute volume so Z-scores are sane
+    // from the start. Without this, 89 bins of 0 + 1 real bin = infinite Z.
+    const estPerMin = Math.max(1, Math.round(baseVolume || currentVolume / 1440));
     binStore.set(marketId, {
-      bins: new Array(BIN_COUNT).fill(0),
+      bins: new Array(BIN_COUNT).fill(estPerMin),
       lastVolume: currentVolume,
       lastBinTs: Date.now(),
       lastBinIdx: getCurrentBinIndex(),
-      pollCount: 0, // track how many updates we've seen
+      pollCount: 0,
     });
   }
   return binStore.get(marketId);
 }
 
-function updateBins(marketId, currentVolume) {
-  const state = getOrCreateBinState(marketId, currentVolume);
+function updateBins(marketId, currentVolume, baseVolume) {
+  const state = getOrCreateBinState(marketId, currentVolume, baseVolume);
   const nowIdx = getCurrentBinIndex();
   state.pollCount += 1;
 
@@ -89,7 +92,7 @@ export async function fetchAllMarkets() {
 
   // Update bins for each market
   for (const m of all) {
-    m.bins = updateBins(m.id, m.totalVolume24h);
+    m.bins = updateBins(m.id, m.totalVolume24h, m.baseVolume);
   }
 
   // Sort by 24h volume descending
