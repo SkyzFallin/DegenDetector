@@ -26,11 +26,7 @@ const FETCH_TIMEOUT = 15000;
 
 // ─── Market Search ──────────────────────────────────────────
 
-let _kalshiEventCache = null;
-let _kalshiCacheTs = 0;
 const CACHE_TTL = 300000; // 5 min
-let _kalshiSettledCache = null;
-let _kalshiSettledCacheTs = 0;
 
 export async function searchMarkets(keyword) {
   if (!keyword || keyword.length < 2) return [];
@@ -39,7 +35,9 @@ export async function searchMarkets(keyword) {
   return searchKalshi(kw);
 }
 
-async function fetchKalshiEvents(status, cache, cacheTs) {
+const _settledCache = { data: null, ts: 0 };
+
+async function fetchKalshiEvents(status, cache) {
   if (cache.data && Date.now() - cache.ts < CACHE_TTL) return cache.data;
   try {
     const res = await fetch(`${KALSHI_BASE}/events?limit=200&status=${status}&with_nested_markets=true`, {
@@ -52,9 +50,6 @@ async function fetchKalshiEvents(status, cache, cacheTs) {
     return cache.data;
   } catch { return []; }
 }
-
-const _openCache = { data: null, ts: 0 };
-const _settledCache = { data: null, ts: 0 };
 
 async function searchKalshi(kw) {
   try {
@@ -100,37 +95,6 @@ async function searchKalshi(kw) {
     return results.slice(0, 30);
   } catch (err) {
     console.error("[History] Kalshi search failed:", err);
-    return [];
-  }
-}
-
-async function searchPoly(kw) {
-  try {
-    // Only fetch closed markets — history tab is for retroactive analysis of resolved markets
-    const closedRes = await fetch(`${POLY_BASE}/markets?limit=100&closed=true&order=volume24hr&ascending=false`, { signal: AbortSignal.timeout(FETCH_TIMEOUT) });
-    const closedData = closedRes.ok ? await closedRes.json() : [];
-    const markets = Array.isArray(closedData) ? closedData : [];
-
-    return markets
-      .filter((m) => (m.question || "").toLowerCase().includes(kw) || (m.slug || "").toLowerCase().includes(kw))
-      .slice(0, 20)
-      .map((m) => {
-        let tokenIds;
-        try { tokenIds = JSON.parse(m.clobTokenIds || "[]"); } catch { tokenIds = []; }
-        return {
-          id: `poly-${m.id}`,
-          venue: "Polymarket",
-          name: m.question || m.slug,
-          marketId: m.id,
-          tokenId: tokenIds[0] || null,
-          conditionId: m.conditionId,
-          category: classifyCategory(m.question + " " + (m.slug || ""), m.events),
-          status: "closed",
-          endDate: m.endDate,
-        };
-      });
-  } catch (err) {
-    console.error("[History] Polymarket search failed:", err);
     return [];
   }
 }

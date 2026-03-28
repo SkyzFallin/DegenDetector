@@ -20,6 +20,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/clob/, ""),
       },
+      "/api/telegram": {
+        target: "https://api.telegram.org",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/telegram/, ""),
+      },
     },
   },
 });
