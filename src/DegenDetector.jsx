@@ -33,7 +33,7 @@ const C = {
 
 // ─── Insider-relevant categories & markets ──────────────────────
 const VENUES = ["Polymarket", "Kalshi"];
-const CATEGORIES = ["Regulatory", "Political", "Financial", "Legal", "Geopolitical", "Corporate"];
+import { CATEGORIES } from "./api/categories.js";
 
 // Markets are now fetched live from Polymarket + Kalshi APIs
 
@@ -197,7 +197,7 @@ function VenueBadge({ venue }) {
 }
 
 function CatBadge({ cat }) {
-  const icons = { Regulatory: "⚖️", Political: "🏛️", Financial: "💹", Legal: "⚖️", Geopolitical: "🌍", Corporate: "🏢" };
+  const icons = { Regulatory: "⚖️", Political: "🏛️", Financial: "💹", Legal: "⚖️", Geopolitical: "🌍", Corporate: "🏢", Sports: "🏈", Entertainment: "🎬", Science: "🔬", Climate: "🌡️" };
   return (<span style={{ fontSize: 9, color: C.textDim, padding: "2px 6px", background: C.border, borderRadius: 4 }}>{icons[cat] || "📌"} {cat}</span>);
 }
 

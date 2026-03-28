@@ -8,12 +8,9 @@ import { classifyCategory, LEAK_PROBS } from "./categories.js";
 const BASE = "/api/kalshi";
 const FETCH_TIMEOUT = 8000;
 
-// Skip sports/entertainment — we want political, financial, geopolitical
-const SKIP_CATEGORIES = new Set(["Sports", "Entertainment"]);
-
 /**
  * Fetch active markets from Kalshi via the events endpoint.
- * This gives us properly titled markets instead of sports combo noise.
+ * All categories are included — filtering is done in the UI via toggle chips.
  */
 export async function fetchKalshiMarkets(limit = 60) {
   try {
@@ -25,7 +22,6 @@ export async function fetchKalshiMarkets(limit = 60) {
 
     const results = [];
     for (const event of events) {
-      if (SKIP_CATEGORIES.has(event.category)) continue;
       const markets = event.markets || [];
       for (const m of markets) {
         const mapped = mapKalshi(m, event);
@@ -53,9 +49,9 @@ function mapKalshi(m, event) {
   if (m.strike_type === "custom" && m.mve_selected_legs?.length > 2) return null;
   if (m.title && m.title.length > 150) return null;
   if (totalVolume === 0 && volume24h === 0) return null;
-  // Filter out sports by ticker pattern
+  // Still filter out multi-game combo tickers (they have garbage titles)
   const ticker = (m.ticker || "").toUpperCase();
-  if (/^KX(NBA|NFL|MLB|NHL|NCAA|MLS|SPORT|MVE)/.test(ticker)) return null;
+  if (/^KXMVE/.test(ticker)) return null;
 
   // Use event title if market title is just a ticker value
   const title = (m.title && m.title.length < 100) ? m.title : (event?.title || m.ticker || "Unknown");
