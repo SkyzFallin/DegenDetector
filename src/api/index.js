@@ -11,6 +11,9 @@ import { fetchKalshiMarkets } from "./kalshi.js";
 
 const BIN_COUNT = 90;
 const binStore = new Map(); // marketId → { bins: number[], lastVolume: number, lastBinTs: number }
+const BIN_CACHE_KEY = "dd_bin_cache";
+const BIN_CACHE_MAX_AGE = 90 * 60000; // 90 minutes — older cache is useless
+let _lastCacheSave = 0;
 
 function getCurrentBinIndex() {
   return Math.floor(Date.now() / 60000) % BIN_COUNT;
@@ -19,6 +22,67 @@ function getCurrentBinIndex() {
 // Minimum number of polls before we trust a market's bin data for alerting.
 // At 10s polling, 18 polls = ~3 minutes of baseline data.
 const MIN_POLLS_FOR_ALERTING = 18;
+
+// ─── Bin Cache: persist to localStorage to skip warmup on restart ───
+
+function saveBinCache() {
+  // Throttle: save at most every 30 seconds
+  if (Date.now() - _lastCacheSave < 30000) return;
+  _lastCacheSave = Date.now();
+  try {
+    const data = {};
+    for (const [id, state] of binStore) {
+      data[id] = { bins: state.bins, lastVolume: state.lastVolume, lastBinIdx: state.lastBinIdx, pollCount: state.pollCount };
+    }
+    const json = JSON.stringify({ ts: Date.now(), data });
+    localStorage.setItem(BIN_CACHE_KEY, json);
+    console.log(`[BinCache] Saved ${Object.keys(data).length} markets (${(json.length / 1024).toFixed(1)} KB)`);
+  } catch (e) { console.error("[BinCache] Save failed:", e); }
+}
+
+function restoreBinCache() {
+  try {
+    const raw = localStorage.getItem(BIN_CACHE_KEY);
+    if (!raw) return;
+    const cache = JSON.parse(raw);
+    if (!cache?.ts || !cache?.data) return;
+
+    const age = Date.now() - cache.ts;
+    if (age > BIN_CACHE_MAX_AGE) {
+      localStorage.removeItem(BIN_CACHE_KEY);
+      return;
+    }
+
+    const nowIdx = getCurrentBinIndex();
+    for (const [id, saved] of Object.entries(cache.data)) {
+      // Zero out bins that would have been skipped since last save
+      const bins = [...saved.bins];
+      if (saved.lastBinIdx !== nowIdx) {
+        let idx = (saved.lastBinIdx + 1) % BIN_COUNT;
+        while (idx !== nowIdx) {
+          bins[idx] = 0;
+          idx = (idx + 1) % BIN_COUNT;
+        }
+        bins[nowIdx] = 0;
+      }
+      binStore.set(id, {
+        bins,
+        lastVolume: saved.lastVolume,
+        lastBinTs: Date.now(),
+        lastBinIdx: nowIdx,
+        // Restore poll count so warmup is already satisfied
+        pollCount: Math.max(saved.pollCount, MIN_POLLS_FOR_ALERTING),
+      });
+    }
+    console.log(`[BinCache] Restored ${binStore.size} markets (age: ${Math.round(age / 1000)}s)`);
+  } catch (e) {
+    console.error("[BinCache] Restore failed:", e);
+    localStorage.removeItem(BIN_CACHE_KEY);
+  }
+}
+
+// Restore on module load
+restoreBinCache();
 
 function getOrCreateBinState(marketId, currentVolume, baseVolume) {
   if (!binStore.has(marketId)) {
@@ -59,6 +123,7 @@ function updateBins(marketId, currentVolume, baseVolume) {
     state.bins[nowIdx] += delta;
   }
   state.lastVolume = currentVolume;
+  saveBinCache();
 
   // Return bins in chronological order (oldest first)
   const ordered = [];
@@ -114,13 +179,16 @@ export async function fetchAllMarkets() {
  * Refresh prices/volumes for existing markets.
  * Returns updated market array with fresh bins.
  */
-export async function refreshMarkets(existingMarkets) {
+const CLOSED_KEEP_MS = 3600000; // Keep closed markets for 1 hour
+
+export async function refreshMarkets(existingMarkets, favoriteIds = new Set()) {
   const fresh = await fetchAllMarkets();
 
   // Merge: update existing markets with new data, preserve pins and UI state
   const existingMap = new Map(existingMarkets.map((m) => [m.id, m]));
+  const freshIds = new Set(fresh.map((m) => m.id));
 
-  return fresh.map((m) => {
+  const merged = fresh.map((m) => {
     const prev = existingMap.get(m.id);
     if (prev) {
       return {
@@ -128,12 +196,27 @@ export async function refreshMarkets(existingMarkets) {
         pinned: prev.pinned,
         // Calculate price change from our last known price (0 is a valid value)
         priceChange: m.price !== prev.price ? m.price - prev.price : m.priceChange,
-        // Track the first price we saw for this market — used for regime shift detection
+        // Track the first price we saw for this market — used for price flip detection
         baselinePrice: prev.baselinePrice ?? prev.price,
+        // Track when market closed (negative expiry)
+        _closedAt: m.expiryHours < 0.02 ? (prev._closedAt || Date.now()) : null,
       };
     }
-    return { ...m, baselinePrice: m.price };
+    return { ...m, baselinePrice: m.price, _closedAt: m.expiryHours < 0.02 ? Date.now() : null };
   });
+
+  // Keep recently-closed markets that the API no longer returns (up to 1 hour)
+  for (const prev of existingMarkets) {
+    if (!freshIds.has(prev.id)) {
+      const closedAt = prev._closedAt || Date.now();
+      const isFav = favoriteIds.has(prev.id);
+      if (isFav || Date.now() - closedAt < CLOSED_KEEP_MS) {
+        merged.push({ ...prev, _closedAt: closedAt, _stale: true });
+      }
+    }
+  }
+
+  return merged;
 }
 
 /**

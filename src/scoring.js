@@ -61,7 +61,7 @@ export function computeSuspicion(market, atTime = null) {
   // 3. Directional conviction (0-15)
   const conviction = clamp(Math.abs(market.priceChange) / 0.10, 0, 1) * 15;
 
-  // 4. Price regime shift (0-15) — THE degen detector
+  // 4. Price flip (0-15) — THE degen detector
   // Measures how far the price has moved from its baseline.
   // A market flipping from 5¢ → 90¢ is someone who KNOWS the outcome.
   // Compare current price to baseline median; a 50¢+ shift = max score.
@@ -124,7 +124,7 @@ export function analyzeSpike(market) {
   if (market.price != null && market.baselinePrice != null && Math.abs(market.price - market.baselinePrice) > 0.20) {
     const dir = market.price > market.baselinePrice ? "YES" : "NO";
     const shift = Math.abs(market.price - market.baselinePrice);
-    flags.push({ icon: "🔀", text: `Price regime shift toward ${dir}`, detail: `${Math.round(shift * 100)}¢ move from baseline — someone may know the outcome` });
+    flags.push({ icon: "🔀", text: `Price flip toward ${dir}`, detail: `${Math.round(shift * 100)}¢ move from baseline — someone may know the outcome` });
   }
   if (bins.at(-1) > (market.baseVolume || 1) * 50) flags.push({ icon: "🐋", text: "Whale-sized print", detail: `${bins.at(-1)} contracts — ${Math.round(bins.at(-1) / (market.baseVolume || 1))}x normal` });
   return flags;
