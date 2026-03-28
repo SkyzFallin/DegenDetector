@@ -434,53 +434,82 @@ export default function HistoryView() {
               </div>
             </div>
 
-            {/* Pre-Close Trading Analysis — the smoking gun */}
+            {/* Pre-Close Insider Analysis — only counts winning-side bets */}
             {selected?.result && selected?.closeTime && scoredData && (
               (() => {
                 const closeTs = new Date(selected.closeTime).getTime();
-                const oneHourBefore = closeTs - 3600000;
-                const preCloseBins = scoredData.filter((b) => b.ts >= oneHourBefore && b.ts <= closeTs);
-                const yesTotal = preCloseBins.reduce((s, b) => s + (b.yesVol || 0), 0);
-                const noTotal = preCloseBins.reduce((s, b) => s + (b.noVol || 0), 0);
-                const total = yesTotal + noTotal;
-                if (total === 0) return null;
                 const winSide = selected.result; // "yes" or "no"
-                const winVol = winSide === "yes" ? yesTotal : noTotal;
-                const winPct = Math.round((winVol / total) * 100);
-                // Estimate average price from the chart data
-                const avgPrice = preCloseBins.filter((b) => b.price).reduce((s, b) => s + b.price, 0) / (preCloseBins.filter((b) => b.price).length || 1);
-                const estProfit = Math.round(winVol * (1 - avgPrice));
-                const insiderLikely = winPct > 55;
+                const loseSide = winSide === "yes" ? "no" : "yes";
+                const winColor = winSide === "yes" ? C.neon : "#ff88cc";
+                const loseColor = winSide === "yes" ? "#ff88cc" : C.neon;
+
+                // Analyze multiple time windows
+                const windows = [
+                  { label: "15 min", ms: 900000 },
+                  { label: "30 min", ms: 1800000 },
+                  { label: "1 hour", ms: 3600000 },
+                  { label: "2 hours", ms: 7200000 },
+                ];
+
+                const analyses = windows.map((w) => {
+                  const bins = scoredData.filter((b) => b.ts >= closeTs - w.ms && b.ts <= closeTs);
+                  const winVol = bins.reduce((s, b) => s + (winSide === "yes" ? (b.yesVol || 0) : (b.noVol || 0)), 0);
+                  const loseVol = bins.reduce((s, b) => s + (winSide === "yes" ? (b.noVol || 0) : (b.yesVol || 0)), 0);
+                  const total = winVol + loseVol;
+                  const prices = bins.filter((b) => b.price != null).map((b) => b.price);
+                  const avgPrice = prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : 0.5;
+                  // For YES winners: profit = contracts × (1 - avg_price_paid)
+                  // For NO winners: profit = contracts × avg_yes_price (since they bought NO cheap)
+                  const profitPerContract = winSide === "yes" ? (1 - avgPrice) : avgPrice;
+                  const estProfit = Math.round(winVol * profitPerContract);
+                  return { ...w, winVol, loseVol, total, avgPrice, estProfit, pct: total > 0 ? Math.round((winVol / total) * 100) : 0 };
+                });
+
+                const best = analyses.find((a) => a.winVol > 0 && a.pct > 55) || analyses[2]; // default to 1h
+                if (best.total === 0) return null;
+                const insiderLikely = best.pct > 55 && best.winVol > 50;
 
                 return (
                   <div style={{ background: insiderLikely ? `${C.danger}0a` : C.bgCard, border: `1px solid ${insiderLikely ? C.danger + "30" : C.border}`, borderRadius: 10, padding: 14, marginBottom: 14 }}>
                     <div style={{ fontSize: 10, fontWeight: 700, color: insiderLikely ? C.danger : C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
-                      {insiderLikely ? "🚨" : "📊"} Pre-Close Trading Analysis (last 60 min)
+                      {insiderLikely ? "🚨 Insider Trading Evidence" : "📊 Pre-Close Trading Analysis"} — Winning Side Only
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
-                      <div style={{ textAlign: "center", padding: "8px", background: `${C.neon}10`, borderRadius: 6 }}>
-                        <div style={{ fontSize: 18, fontWeight: 800, color: C.neon, fontFamily: "'Azeret Mono', monospace" }}>{yesTotal.toLocaleString()}</div>
-                        <div style={{ fontSize: 9, color: C.textMuted }}>YES contracts bought</div>
-                      </div>
-                      <div style={{ textAlign: "center", padding: "8px", background: "#ff88cc10", borderRadius: 6 }}>
-                        <div style={{ fontSize: 18, fontWeight: 800, color: "#ff88cc", fontFamily: "'Azeret Mono', monospace" }}>{noTotal.toLocaleString()}</div>
-                        <div style={{ fontSize: 9, color: C.textMuted }}>NO contracts bought</div>
-                      </div>
-                      <div style={{ textAlign: "center", padding: "8px", background: `${winSide === "yes" ? C.neon : "#ff88cc"}10`, borderRadius: 6 }}>
-                        <div style={{ fontSize: 18, fontWeight: 800, color: winSide === "yes" ? C.neon : "#ff88cc", fontFamily: "'Azeret Mono', monospace" }}>{winPct}%</div>
-                        <div style={{ fontSize: 9, color: C.textMuted }}>bought the winning side</div>
-                      </div>
+
+                    {/* Time window breakdown */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 12 }}>
+                      {analyses.map((a) => (
+                        <div key={a.label} style={{ textAlign: "center", padding: "6px", background: a.pct > 55 ? `${C.danger}10` : C.bgElevated, borderRadius: 6, border: `1px solid ${a.pct > 55 ? C.danger + "30" : C.border}` }}>
+                          <div style={{ fontSize: 8, color: C.textDim, marginBottom: 3 }}>Last {a.label}</div>
+                          <div style={{ fontSize: 14, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: a.pct > 55 ? C.danger : C.text }}>{a.winVol.toLocaleString()}</div>
+                          <div style={{ fontSize: 8, color: winColor }}>winning {winSide.toUpperCase()} buys</div>
+                          <div style={{ fontSize: 8, color: C.textDim, marginTop: 2 }}>{a.pct}% of all volume</div>
+                        </div>
+                      ))}
                     </div>
-                    <div style={{ padding: "8px 12px", background: C.bgElevated, borderRadius: 6, fontSize: 11, lineHeight: 1.6 }}>
+
+                    {/* Verdict */}
+                    <div style={{ padding: "10px 12px", background: C.bgElevated, borderRadius: 6, fontSize: 11, lineHeight: 1.7 }}>
+                      <div style={{ color: C.text, marginBottom: 4 }}>
+                        This market resolved <span style={{ fontWeight: 800, color: winColor, fontSize: 13 }}>{winSide.toUpperCase()}</span>.
+                      </div>
                       <div style={{ color: C.text }}>
-                        Market resolved <span style={{ fontWeight: 800, color: winSide === "yes" ? C.neon : "#ff88cc" }}>{winSide.toUpperCase()}</span>.
-                        In the final hour, <span style={{ fontWeight: 700, color: C.text }}>{winVol.toLocaleString()}</span> contracts were bought on the winning side
-                        at an avg price of <span style={{ fontFamily: "'Azeret Mono', monospace", fontWeight: 700 }}>{(avgPrice * 100).toFixed(0)}¢</span>.
+                        In the final {best.label}, <span style={{ fontWeight: 800, color: winColor }}>{best.winVol.toLocaleString()}</span> contracts
+                        were bought on the <span style={{ fontWeight: 700 }}>correct outcome</span> ({best.pct}% of all trades).
+                        <span style={{ color: loseColor }}> {best.loseVol.toLocaleString()}</span> contracts were bought on the losing side.
                       </div>
-                      {insiderLikely && (
-                        <div style={{ marginTop: 6, color: C.danger, fontWeight: 700 }}>
-                          Estimated insider profit: <span style={{ fontSize: 14, fontFamily: "'Azeret Mono', monospace" }}>${estProfit.toLocaleString()}</span>
-                          {" "}({winVol.toLocaleString()} contracts × {((1 - avgPrice) * 100).toFixed(0)}¢ payout each)
+                      {insiderLikely && best.estProfit > 0 && (
+                        <div style={{ marginTop: 8, padding: "8px 10px", background: `${C.danger}12`, borderRadius: 4 }}>
+                          <span style={{ color: C.danger, fontWeight: 800, fontSize: 12 }}>
+                            Estimated profit from insider trades: <span style={{ fontSize: 16, fontFamily: "'Azeret Mono', monospace" }}>${best.estProfit.toLocaleString()}</span>
+                          </span>
+                          <div style={{ fontSize: 9, color: C.textMuted, marginTop: 2 }}>
+                            {best.winVol.toLocaleString()} winning contracts × ~{Math.round(best.profitPerContract * 100)}¢ profit each
+                          </div>
+                        </div>
+                      )}
+                      {!insiderLikely && (
+                        <div style={{ marginTop: 6, color: C.textDim, fontSize: 10 }}>
+                          Trading appears balanced — no strong evidence of insider activity in this window.
                         </div>
                       )}
                     </div>
