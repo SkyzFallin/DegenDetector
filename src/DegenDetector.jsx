@@ -293,7 +293,7 @@ function MarketRow({ market, isSelected, onClick, onPin, onFav, isFav }) {
       <div style={{ textAlign: "right" }}>
         <span style={{ fontSize: 11, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: warming ? C.textDim : activity > 5 ? C.danger : activity > 2 ? C.warning : C.textDim }}>{warming ? "—" : activity >= 10 ? `${Math.round(activity)}x` : activity >= 1.1 ? `${activity.toFixed(1)}x` : "—"}</span>
         {market.walletRisk && market.walletRisk.totalVolume > 0 && (
-          <div style={{ fontSize: 8, fontWeight: 700, color: market.walletRisk.dominantSide === "YES" ? C.neon : "#ff88cc" }}>
+          <div style={{ fontSize: 8, fontWeight: 700, color: market.walletRisk.dominantSide === "YES" ? C.neon : C.danger }}>
             {market.walletRisk.dominantSide} {Math.round(market.walletRisk.sideRatio * 100)}%
           </div>
         )}
@@ -308,7 +308,7 @@ function AlertCard({ alert, onAck, market, onView }) {
   const hasChart = bins && bins.length > 0;
   const alertMed = hasChart ? median(bins) : 0;
   const alertThreshold = hasChart ? alertMed + 6 * (mad(bins) / 0.6745) : 0;
-  const dirColor = alert.priceChange >= 0 ? C.neon : "#ff88cc";
+  const dirColor = alert.priceChange >= 0 ? C.neon : C.danger;
   return (
     <div onClick={() => setOpen(!open)} style={{
       padding: "12px 14px", background: C.bgCard,
@@ -499,8 +499,8 @@ function DetailPanel({ market, telegramCfg }) {
           {market.walletRisk.totalVolume > 0 && (
             <div style={{ display: "flex", gap: 4, marginBottom: 8, alignItems: "center" }}>
               <div style={{ flex: market.walletRisk.buyVolume, height: 8, background: C.neon, borderRadius: "4px 0 0 4px", opacity: 0.7 }} />
-              <div style={{ flex: market.walletRisk.sellVolume || 0.01, height: 8, background: "#ff88cc", borderRadius: "0 4px 4px 0", opacity: 0.7 }} />
-              <span style={{ fontSize: 9, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: market.walletRisk.dominantSide === "YES" ? C.neon : "#ff88cc", flexShrink: 0, marginLeft: 4 }}>
+              <div style={{ flex: market.walletRisk.sellVolume || 0.01, height: 8, background: C.danger, borderRadius: "0 4px 4px 0", opacity: 0.7 }} />
+              <span style={{ fontSize: 9, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: market.walletRisk.dominantSide === "YES" ? C.neon : C.danger, flexShrink: 0, marginLeft: 4 }}>
                 {market.walletRisk.dominantSide} {Math.round(market.walletRisk.sideRatio * 100)}%
               </span>
             </div>
@@ -538,7 +538,7 @@ function DetailPanel({ market, telegramCfg }) {
       )}
 
       {/* Volume chart */}
-      {(() => { const dirColor = market.priceChange >= 0 ? C.neon : "#ff88cc"; const gradId = `vGrad-${market.id}`; return (
+      {(() => { const dirColor = market.priceChange >= 0 ? C.neon : C.danger; const gradId = `vGrad-${market.id}`; return (
       <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
         <div style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>Volume / Minute — 90m window</div>
         <ResponsiveContainer width="100%" height={160}>
@@ -561,7 +561,7 @@ function DetailPanel({ market, telegramCfg }) {
           <div style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Last 20 Bins — Spike Detection</div>
           <div style={{ display: "flex", gap: 8, fontSize: 8, color: C.textDim }}>
             <span><span style={{ display: "inline-block", width: 8, height: 3, background: C.neon, borderRadius: 1, marginRight: 3 }}/>YES pressure</span>
-            <span><span style={{ display: "inline-block", width: 8, height: 3, background: "#ff88cc", borderRadius: 1, marginRight: 3 }}/>NO pressure</span>
+            <span><span style={{ display: "inline-block", width: 8, height: 3, background: C.danger, borderRadius: 1, marginRight: 3 }}/>NO pressure</span>
           </div>
         </div>
         <ResponsiveContainer width="100%" height={100}>
@@ -570,7 +570,7 @@ function DetailPanel({ market, telegramCfg }) {
             <YAxis tick={{ fontSize: 7, fill: C.textDim }} axisLine={false} tickLine={false} width={24} />
             <ReferenceLine y={Math.round(threshold)} stroke={C.danger} strokeDasharray="3 3" />
             {closeLabel20 && <ReferenceLine x={closeLabel20} stroke={C.warning} strokeWidth={2} strokeDasharray="4 2" />}
-            <Bar dataKey="vol" radius={[2, 2, 0, 0]}>{barData.map((d, i) => (<Cell key={i} fill={market.priceChange >= 0 ? C.neon : "#ff88cc"} opacity={d.isSpike ? 0.9 : 0.4} />))}</Bar>
+            <Bar dataKey="vol" radius={[2, 2, 0, 0]}>{barData.map((d, i) => (<Cell key={i} fill={market.priceChange >= 0 ? C.neon : C.danger} opacity={d.isSpike ? 0.9 : 0.4} />))}</Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
