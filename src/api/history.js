@@ -1,0 +1,331 @@
+// ─── Historical Data API ─────────────────────────────────────
+// Fetches historical trades/prices for retroactive spike analysis.
+// Kalshi: real trade data at per-trade granularity (public, no auth)
+// Polymarket: price history via CLOB API (limited for resolved markets)
+
+import { classifyCategory, LEAK_PROBS } from "./categories.js";
+import { computeSuspicion, robustZ } from "../scoring.js";
+
+const KALSHI_BASE = "/api/kalshi";
+const POLY_BASE = "/api/poly";
+const CLOB_BASE = "/api/clob";
+const FETCH_TIMEOUT = 15000;
+
+// ─── Market Search ──────────────────────────────────────────
+
+let _kalshiEventCache = null;
+let _kalshiCacheTs = 0;
+const CACHE_TTL = 300000; // 5 min
+
+export async function searchMarkets(keyword) {
+  if (!keyword || keyword.length < 2) return [];
+  const kw = keyword.toLowerCase();
+  const [kalshi, poly] = await Promise.all([
+    searchKalshi(kw),
+    searchPoly(kw),
+  ]);
+  return [...poly, ...kalshi];
+}
+
+async function searchKalshi(kw) {
+  try {
+    // Cache the events list to avoid hammering the API
+    if (!_kalshiEventCache || Date.now() - _kalshiCacheTs > CACHE_TTL) {
+      const res = await fetch(`${KALSHI_BASE}/events?limit=200&with_nested_markets=true`, {
+        signal: AbortSignal.timeout(FETCH_TIMEOUT),
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      _kalshiEventCache = data.events || [];
+      _kalshiCacheTs = Date.now();
+    }
+
+    const results = [];
+    for (const ev of _kalshiEventCache) {
+      const markets = ev.markets || [];
+      for (const m of markets) {
+        const title = m.title || ev.title || "";
+        if (title.toLowerCase().includes(kw) || (m.ticker || "").toLowerCase().includes(kw)) {
+          results.push({
+            id: m.ticker,
+            venue: "Kalshi",
+            name: title.length < 100 ? title : ev.title || title.slice(0, 80),
+            ticker: m.ticker,
+            eventTicker: ev.ticker,
+            category: classifyCategory(`${title} ${ev.category || ""}`),
+            status: m.status || "unknown",
+            endDate: m.expiration_time || m.close_time,
+          });
+        }
+        if (results.length >= 30) break;
+      }
+      if (results.length >= 30) break;
+    }
+    return results;
+  } catch (err) {
+    console.error("[History] Kalshi search failed:", err);
+    return [];
+  }
+}
+
+async function searchPoly(kw) {
+  try {
+    const res = await fetch(`${POLY_BASE}/markets?limit=100&active=true&closed=false&order=volume24hr&ascending=false`, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const markets = Array.isArray(data) ? data : [];
+
+    return markets
+      .filter((m) => (m.question || "").toLowerCase().includes(kw) || (m.slug || "").toLowerCase().includes(kw))
+      .slice(0, 20)
+      .map((m) => {
+        let tokenIds;
+        try { tokenIds = JSON.parse(m.clobTokenIds || "[]"); } catch { tokenIds = []; }
+        return {
+          id: `poly-${m.id}`,
+          venue: "Polymarket",
+          name: m.question || m.slug,
+          marketId: m.id,
+          tokenId: tokenIds[0] || null,
+          conditionId: m.conditionId,
+          category: classifyCategory(m.question + " " + (m.slug || ""), m.events),
+          status: m.closed ? "closed" : "active",
+          endDate: m.endDate,
+        };
+      });
+  } catch (err) {
+    console.error("[History] Polymarket search failed:", err);
+    return [];
+  }
+}
+
+// ─── Historical Trade Fetching ──────────────────────────────
+
+/**
+ * Fetch Kalshi trades for a ticker within a time range.
+ * Paginates automatically (up to 10 pages).
+ */
+export async function fetchKalshiTrades(ticker, startTs, endTs) {
+  const trades = [];
+  let cursor = null;
+  const maxPages = 10;
+
+  for (let page = 0; page < maxPages; page++) {
+    const params = new URLSearchParams({
+      ticker,
+      limit: "1000",
+      min_ts: String(Math.floor(startTs / 1000)),
+      max_ts: String(Math.floor(endTs / 1000)),
+    });
+    if (cursor) params.set("cursor", cursor);
+
+    try {
+      const res = await fetch(`${KALSHI_BASE}/markets/trades?${params}`, {
+        signal: AbortSignal.timeout(FETCH_TIMEOUT),
+      });
+      if (!res.ok) break;
+      const data = await res.json();
+      const batch = data.trades || [];
+      trades.push(...batch);
+      cursor = data.cursor;
+      if (!cursor || batch.length < 1000) break;
+    } catch (err) {
+      console.error(`[History] Kalshi trades page ${page} failed:`, err);
+      break;
+    }
+  }
+
+  return trades.map((t) => ({
+    ts: new Date(t.created_time).getTime(),
+    volume: parseFloat(t.count_fp) || 0,
+    price: parseFloat(t.yes_price_dollars) || 0,
+    side: t.taker_side,
+  }));
+}
+
+/**
+ * Fetch Polymarket price history for a token.
+ * Returns price points — volume is approximated from price velocity.
+ */
+export async function fetchPolyPriceHistory(tokenId, startTs, endTs) {
+  if (!tokenId) return [];
+  try {
+    const params = new URLSearchParams({
+      market: tokenId,
+      startTs: String(Math.floor(startTs / 1000)),
+      endTs: String(Math.floor(endTs / 1000)),
+      fidelity: "1", // 1-minute
+    });
+    const res = await fetch(`${CLOB_BASE}/prices-history?${params}`, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const history = data.history || [];
+    return history.map((p) => ({
+      ts: (p.t || 0) * 1000,
+      price: parseFloat(p.p) || 0,
+    }));
+  } catch (err) {
+    console.error("[History] Polymarket price history failed:", err);
+    return [];
+  }
+}
+
+// ─── Binning ────────────────────────────────────────────────
+
+/**
+ * Bin raw Kalshi trades into per-minute volume + avg price buckets.
+ */
+export function binKalshiTrades(trades, startTs, endTs) {
+  const intervalMs = 60000;
+  const binCount = Math.ceil((endTs - startTs) / intervalMs);
+  const bins = [];
+
+  for (let i = 0; i < binCount; i++) {
+    bins.push({
+      ts: startTs + i * intervalMs,
+      volume: 0,
+      priceSum: 0,
+      tradeCount: 0,
+    });
+  }
+
+  for (const t of trades) {
+    const idx = Math.floor((t.ts - startTs) / intervalMs);
+    if (idx >= 0 && idx < binCount) {
+      bins[idx].volume += t.volume;
+      bins[idx].priceSum += t.price * t.volume;
+      bins[idx].tradeCount += 1;
+    }
+  }
+
+  return bins.map((b) => ({
+    ts: b.ts,
+    volume: Math.round(b.volume),
+    price: b.tradeCount > 0 ? b.priceSum / b.volume : null,
+    time: new Date(b.ts).toISOString().slice(11, 16), // HH:MM for chart labels
+  }));
+}
+
+/**
+ * Convert Polymarket price points to binned data.
+ * Uses price velocity (absolute change per interval) as a volume proxy.
+ */
+export function binPolyPrices(pricePoints, startTs, endTs) {
+  if (pricePoints.length < 2) return [];
+  const intervalMs = 60000;
+  const binCount = Math.ceil((endTs - startTs) / intervalMs);
+  const bins = [];
+
+  // Index price points by bin
+  const priceByBin = new Map();
+  for (const p of pricePoints) {
+    const idx = Math.floor((p.ts - startTs) / intervalMs);
+    if (idx >= 0 && idx < binCount) {
+      priceByBin.set(idx, p.price);
+    }
+  }
+
+  let lastPrice = pricePoints[0].price;
+  for (let i = 0; i < binCount; i++) {
+    const price = priceByBin.get(i) ?? lastPrice;
+    const velocity = Math.abs(price - lastPrice) * 10000; // scale up for visibility
+    bins.push({
+      ts: startTs + i * intervalMs,
+      volume: Math.round(velocity),
+      price,
+      time: new Date(startTs + i * intervalMs).toISOString().slice(11, 16),
+    });
+    lastPrice = price;
+  }
+
+  return bins;
+}
+
+// ─── Retroactive Scoring ────────────────────────────────────
+
+/**
+ * Slide a 90-bin window across the timeline, computing suspicion at each point.
+ * Returns enriched bins with suspicion scores.
+ */
+export function computeRetroactiveScores(bins, marketMeta) {
+  const windowSize = 90;
+  const leakProb = LEAK_PROBS[marketMeta.category] || 0.5;
+
+  return bins.map((bin, i) => {
+    if (i < windowSize) {
+      return { ...bin, suspicion: 0, zScore: 0 };
+    }
+
+    const window = bins.slice(i - windowSize, i).map((b) => b.volume);
+    const currentVol = bin.volume;
+    const z = robustZ(currentVol, window);
+
+    // Build a synthetic market object for computeSuspicion
+    const prevPrice = bins[i - 1]?.price ?? bin.price;
+    const syntheticMarket = {
+      bins: [...window, currentVol],
+      priceChange: (bin.price || 0) - (prevPrice || 0),
+      leakProb,
+      hasRecentNews: false, // conservative — assume no news for historical
+      category: marketMeta.category,
+      baseVolume: Math.max(1, window.reduce((a, b) => a + b, 0) / window.length),
+    };
+
+    const suspicion = computeSuspicion(syntheticMarket, bin.ts);
+
+    return { ...bin, suspicion, zScore: Math.round(z * 10) / 10 };
+  });
+}
+
+/**
+ * Find spike onset — the first point where suspicion crosses the threshold.
+ * Looks backward from the peak to find when the spike started building.
+ */
+export function findSpikeOnset(scoredBins, threshold = 60) {
+  const spikes = [];
+  let inSpike = false;
+  let spikeStart = null;
+  let spikePeak = null;
+
+  for (let i = 0; i < scoredBins.length; i++) {
+    const b = scoredBins[i];
+    if (b.suspicion >= threshold && !inSpike) {
+      inSpike = true;
+      spikeStart = i;
+      spikePeak = i;
+    } else if (b.suspicion >= threshold && inSpike) {
+      if (b.suspicion > scoredBins[spikePeak].suspicion) spikePeak = i;
+    } else if (b.suspicion < threshold && inSpike) {
+      spikes.push({
+        startTs: scoredBins[spikeStart].ts,
+        peakTs: scoredBins[spikePeak].ts,
+        endTs: scoredBins[i].ts,
+        peakSuspicion: scoredBins[spikePeak].suspicion,
+        peakZ: scoredBins[spikePeak].zScore,
+        peakVolume: scoredBins[spikePeak].volume,
+        durationMins: Math.round((scoredBins[i].ts - scoredBins[spikeStart].ts) / 60000),
+      });
+      inSpike = false;
+    }
+  }
+
+  // Handle spike that extends to end of data
+  if (inSpike && spikeStart !== null) {
+    const last = scoredBins.length - 1;
+    spikes.push({
+      startTs: scoredBins[spikeStart].ts,
+      peakTs: scoredBins[spikePeak].ts,
+      endTs: scoredBins[last].ts,
+      peakSuspicion: scoredBins[spikePeak].suspicion,
+      peakZ: scoredBins[spikePeak].zScore,
+      peakVolume: scoredBins[spikePeak].volume,
+      durationMins: Math.round((scoredBins[last].ts - scoredBins[spikeStart].ts) / 60000),
+    });
+  }
+
+  return spikes;
+}

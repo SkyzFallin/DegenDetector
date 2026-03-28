@@ -34,101 +34,16 @@ const C = {
 // ─── Insider-relevant categories & markets ──────────────────────
 const VENUES = ["Polymarket", "Kalshi"];
 import { CATEGORIES } from "./api/categories.js";
+import { median, mad, robustZ, clamp, computeSuspicion, susColor, susLabel, analyzeSpike } from "./scoring.js";
+import HistoryView from "./HistoryView.jsx";
 
 // Markets are now fetched live from Polymarket + Kalshi APIs
 
 // ─── Utilities ──────────────────────────────────────────────────
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 11));
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-function median(a) {
-  if (a.length === 0) return 0;
-  const s = [...a].sort((x, y) => x - y);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-}
-
-function mad(a) {
-  if (a.length === 0) return 0;
-  const med = median(a);
-  return median(a.map((v) => Math.abs(v - med)));
-}
-
-function robustZ(val, win) {
-  const m = median(win);
-  const d = mad(win) + 0.001;
-  return (0.6745 * (val - m)) / d;
-}
-
-// ─── SUSPICION SCORE ────────────────────────────────────────────
-// The core idea: not all spikes are equal.
-// A spike at 3am on a regulatory market with one-directional buying
-// and no news is WAY more suspicious than a gradual ramp on a known event.
-
-function computeSuspicion(market) {
-  const bins = market.bins;
-  const z = robustZ(bins.at(-1), bins);
-  const last5 = bins.slice(-5);
-  const prev10 = bins.slice(-15, -5);
-
-  // 1. Spike suddenness (0-25): ratio of recent to baseline
-  // Scores linearly from 1x to 101x (ratio-1 / 4, clamped to 25)
-  const recentAvg = last5.reduce((a, b) => a + b, 0) / (last5.length || 1);
-  const baseAvg = Math.max(1, prev10.reduce((a, b) => a + b, 0) / (prev10.length || 1));
-  const suddenness = clamp((recentAvg / baseAvg - 1) / 4, 0, 25);
-
-  // 2. Z-score magnitude (0-20)
-  const zScore = clamp(z / 12, 0, 1) * 20;
-
-  // 3. Directional conviction (0-20): one-sided = insider. Balanced = organic.
-  const conviction = clamp(Math.abs(market.priceChange) / 0.10, 0, 1) * 20;
-
-  // 4. Leak probability of market type (0-15)
-  const leakComponent = (market.leakProb || 0.5) * 15;
-
-  // 5. Off-hours bonus (0-10)
-  const hour = new Date().getUTCHours();
-  const offHours = (hour >= 22 || hour <= 6) ? 10 : (hour >= 20 || hour <= 8) ? 5 : 0;
-
-  // 6. No-news flag (0-10)
-  const noNews = market.hasRecentNews ? 0 : 10;
-
-  return Math.round(clamp(suddenness + zScore + conviction + leakComponent + offHours + noNews, 0, 100));
-}
-
-function susColor(score) {
-  if (score >= 80) return C.sus100;
-  if (score >= 60) return C.sus80;
-  if (score >= 40) return C.sus60;
-  if (score >= 20) return C.sus40;
-  return C.sus0;
-}
-
-function susLabel(score) {
-  if (score >= 80) return "EXTREME";
-  if (score >= 60) return "HIGH";
-  if (score >= 40) return "ELEVATED";
-  if (score >= 20) return "LOW";
-  return "BASELINE";
-}
-
-function analyzeSpike(market) {
-  const bins = market.bins;
-  const last5 = bins.slice(-5);
-  const prev20 = bins.slice(-25, -5);
-  const recentAvg = last5.reduce((a, b) => a + b, 0) / last5.length;
-  const baseAvg = Math.max(1, prev20.reduce((a, b) => a + b, 0) / prev20.length);
-  const ratio = recentAvg / baseAvg;
-  const flags = [];
-  if (ratio > 10) flags.push({ icon: "⚡", text: `${Math.round(ratio)}x baseline volume`, detail: `Went from ~${Math.round(baseAvg)} to ${Math.round(recentAvg)} contracts/min` });
-  if (Math.abs(market.priceChange) > 0.04) flags.push({ icon: market.priceChange > 0 ? "📈" : "📉", text: "Strong directional conviction", detail: `${market.priceChange > 0 ? "+" : ""}${(market.priceChange * 100).toFixed(1)}¢ — one-sided buying` });
-  if (!market.hasRecentNews) flags.push({ icon: "🔇", text: "No correlated news detected (heuristic)", detail: "Volume precedes public information — inferred from price stability" });
-  const hour = new Date().getUTCHours();
-  if (hour >= 22 || hour <= 6) flags.push({ icon: "🌙", text: "Off-hours activity", detail: "Spike during low-traffic window" });
-  if (market.leakProb > 0.7) flags.push({ icon: "🔓", text: "High leak-probability market", detail: `${market.category} decisions often leak pre-announcement` });
-  if (bins.at(-1) > market.baseVolume * 50) flags.push({ icon: "🐋", text: "Whale-sized print", detail: `${bins.at(-1)} contracts — ${Math.round(bins.at(-1) / (market.baseVolume || 1))}x normal` });
-  return flags;
-}
+// Scoring functions (median, mad, robustZ, clamp, computeSuspicion, etc.)
+// are imported from ./scoring.js — shared with the History tab
 
 // createMarket removed — markets now come from live API data
 
@@ -649,7 +564,7 @@ export default function DegenDetector() {
           <button onClick={manualRefresh} title="Refresh now" style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.textMuted, borderRadius: 6, padding: "3px 7px", fontSize: 11, cursor: "pointer" }}>🔄</button>
           <button onClick={() => setSoundOn(!soundOn)} style={{ background: soundOn ? C.neonDim : "transparent", border: `1px solid ${soundOn ? C.neon + "33" : C.border}`, color: soundOn ? C.neon : C.textDim, borderRadius: 6, padding: "3px 7px", fontSize: 11, cursor: "pointer" }}>{soundOn ? "🔔" : "🔕"}</button>
           <div style={{ display: "flex", background: C.border, borderRadius: 6, padding: 2 }}>
-            {["dashboard", "alerts"].map((v) => (
+            {["dashboard", "alerts", "history"].map((v) => (
               <button key={v} onClick={() => setView(v)} style={{ padding: "4px 12px", fontSize: 10, fontWeight: 700, background: view === v ? C.bgCard : "transparent", color: view === v ? C.text : C.textMuted, border: "none", borderRadius: 4, cursor: "pointer", position: "relative", textTransform: "uppercase", letterSpacing: "0.04em" }}>
                 {v}{v === "alerts" && unacked > 0 && (<span style={{ position: "absolute", top: -3, right: -3, background: C.danger, color: "#fff", fontSize: 7, fontWeight: 800, padding: "1px 4px", borderRadius: 8, minWidth: 12, textAlign: "center", animation: "pulse 1s infinite" }}>{unacked}</span>)}
               </button>
@@ -674,7 +589,9 @@ export default function DegenDetector() {
         <StatCard label="Unacked" value={unacked} color={unacked > 3 ? C.warning : C.text} icon="⚠️" />
       </div>
 
-      {view === "dashboard" ? (
+      {view === "history" ? (
+        <HistoryView />
+      ) : view === "dashboard" ? (
         <div className="dd-main" style={{ display: "flex", flex: 1, overflow: "hidden" }}>
           <div className="dd-list" style={{ flex: "1 1 56%", display: "flex", flexDirection: "column", borderRight: `1px solid ${C.border}`, minWidth: 0 }}>
             <div style={{ display: "flex", gap: 5, padding: "7px 10px", borderBottom: `1px solid ${C.border}`, alignItems: "center", flexWrap: "wrap" }}>

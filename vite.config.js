@@ -15,6 +15,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/kalshi/, ""),
       },
+      "/api/clob": {
+        target: "https://clob.polymarket.com",
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/clob/, ""),
+      },
     },
   },
 });
