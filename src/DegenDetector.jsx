@@ -251,7 +251,7 @@ function MarketRow({ market, isSelected, onClick, onPin, onFav, isFav }) {
   const sus = warming ? 0 : computeSuspicion(market);
   return (
     <div onClick={onClick} style={{
-      display: "grid", gridTemplateColumns: "minmax(0,1.5fr) 56px 62px 64px 90px 44px",
+      display: "grid", gridTemplateColumns: "minmax(0,1.5fr) 56px 62px 72px 64px 90px 44px",
       alignItems: "center", gap: 5, padding: "8px 10px",
       background: isSelected ? C.bgCardHover : "transparent",
       borderBottom: `1px solid ${C.border}`, cursor: "pointer", transition: "background 0.15s",
@@ -277,7 +277,11 @@ function MarketRow({ market, isSelected, onClick, onPin, onFav, isFav }) {
       <div style={{ textAlign: "right" }}>
         <div style={{ fontSize: 12, fontWeight: 700, fontFamily: "'Azeret Mono', monospace", color: C.text }}>{fmtP(market.price)}</div>
         <div style={{ fontSize: 9.5, fontFamily: "'Azeret Mono', monospace", fontWeight: 600, color: market.priceChange >= 0 ? C.neon : C.danger }}>{market.priceChange >= 0 ? "+" : ""}{(market.priceChange * 100).toFixed(1)}¢</div>
-        {market.bestBid > 0 && market.bestAsk > 0 && <div style={{ fontSize: 7.5, fontFamily: "'Azeret Mono', monospace", color: (market.spread || 0) > 0.05 ? C.warning : C.textDim }}>{(market.bestBid * 100).toFixed(0)}↔{(market.bestAsk * 100).toFixed(0)}</div>}
+      </div>
+      <div style={{ textAlign: "right" }}>
+        <div style={{ fontSize: 10, fontFamily: "'Azeret Mono', monospace", color: C.neon }}>{market.bestBid ? (market.bestBid * 100).toFixed(1) : "—"}</div>
+        <div style={{ fontSize: 10, fontFamily: "'Azeret Mono', monospace", color: "#ff88cc" }}>{market.bestAsk ? (market.bestAsk * 100).toFixed(1) : "—"}</div>
+        <div style={{ fontSize: 7, fontFamily: "'Azeret Mono', monospace", color: (market.spread || 0) > 0.05 ? C.warning : C.textDim }}>{((market.spread || 0) * 100).toFixed(1)}¢ spread</div>
       </div>
       <div className="dd-col-vol" style={{ textAlign: "right" }}>
         <div style={{ fontSize: 10.5, fontFamily: "'Azeret Mono', monospace", color: C.textMuted }}>{fmtN(market.totalVolume24h)}</div>
@@ -861,8 +865,8 @@ export default function DegenDetector() {
                 ))}
               </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.5fr) 56px 62px 64px 90px 44px", gap: 5, padding: "5px 10px", fontSize: 8, fontWeight: 800, color: C.textDim, textTransform: "uppercase", letterSpacing: "0.07em", borderBottom: `1px solid ${C.border}`, background: `${C.bgCard}88` }}>
-              <span>Market</span><span>Sus</span><span style={{ textAlign: "right" }}>Yes ¢</span><span className="dd-col-vol" style={{ textAlign: "right" }}>Vol</span><span className="dd-col-spark" style={{ textAlign: "right" }}>Trend</span><span style={{ textAlign: "right" }}>Activity</span>
+            <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.5fr) 56px 62px 72px 64px 90px 44px", gap: 5, padding: "5px 10px", fontSize: 8, fontWeight: 800, color: C.textDim, textTransform: "uppercase", letterSpacing: "0.07em", borderBottom: `1px solid ${C.border}`, background: `${C.bgCard}88` }}>
+              <span>Market</span><span>Sus</span><span style={{ textAlign: "right" }}>Yes ¢</span><span style={{ textAlign: "right" }}>Bid / Ask</span><span className="dd-col-vol" style={{ textAlign: "right" }}>Vol</span><span className="dd-col-spark" style={{ textAlign: "right" }}>Trend</span><span style={{ textAlign: "right" }}>Activity</span>
             </div>
             <div style={{ flex: 1, overflowY: "auto" }}>
               {filtered.map((m) => (<MarketRow key={m.id} market={m} isSelected={m.id === selectedId} onClick={() => setSelectedId(m.id)} onPin={togglePin} onFav={toggleFavorite} isFav={isFavorite(m.id)} />))}
