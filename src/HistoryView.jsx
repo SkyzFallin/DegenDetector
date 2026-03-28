@@ -306,9 +306,11 @@ export default function HistoryView() {
       label: selected.name.slice(0, 50),
       description: `${spikes.length} spike${spikes.length !== 1 ? "s" : ""} detected · ${selected.venue}`,
       search: query || selected.name.split(" ").slice(0, 3).join(" ").toLowerCase(),
+      ticker: selected.ticker || null,
       venue: selected.venue,
-      dateStart: dateRange.start,
-      dateEnd: dateRange.end,
+      // Save dates as UTC ISO strings so loadPreset parses them correctly
+      dateStart: new Date(dateRange.start).toISOString().slice(0, 16),
+      dateEnd: new Date(dateRange.end).toISOString().slice(0, 16),
       newsHeadline: newsAnnos[0]?.text || "",
       newsTime: newsAnnos[0] ? new Date(newsAnnos[0].ts).toISOString().slice(0, 16) : "",
       userSaved: true,

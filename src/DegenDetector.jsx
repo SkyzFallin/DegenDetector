@@ -66,6 +66,49 @@ const fmtN = (n) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1
 const fmtP = (p) => `${(p * 100).toFixed(1)}¢`;
 const fmtExpiry = (h) => h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`;
 
+// ─── Telegram ────────────────────────────────────────────────
+const TG_STORAGE_KEY = "dd_telegram";
+
+function loadTelegramConfig() {
+  try { return JSON.parse(localStorage.getItem(TG_STORAGE_KEY) || "null"); } catch { return null; }
+}
+
+function saveTelegramConfig(cfg) {
+  if (cfg) localStorage.setItem(TG_STORAGE_KEY, JSON.stringify(cfg));
+  else localStorage.removeItem(TG_STORAGE_KEY);
+}
+
+function formatTelegramMessage(alert) {
+  const susLabel = alert.suspicion >= 80 ? "EXTREME" : alert.suspicion >= 60 ? "HIGH" : alert.suspicion >= 40 ? "ELEVATED" : "LOW";
+  const priceStr = `${(alert.price * 100).toFixed(1)}¢`;
+  const changeStr = `${alert.priceChange >= 0 ? "+" : ""}${(alert.priceChange * 100).toFixed(1)}¢`;
+  const flagStr = alert.flags.map((f) => `${f.icon} ${f.text}`).join("\n");
+  return [
+    `🚨 *DEGEN DETECTED*`,
+    ``,
+    `*Market:* ${alert.marketName}`,
+    `*Venue:* ${alert.venue}`,
+    `*Suspicion:* ${alert.suspicion}/100 (${susLabel})`,
+    `*Price:* ${priceStr} (${changeStr})`,
+    `*Z-Score:* ${alert.robustZ}`,
+    `*Severity:* ${alert.severity.toUpperCase()}`,
+    ``,
+    flagStr,
+  ].join("\n");
+}
+
+async function sendTelegramMessage(botToken, chatId, text) {
+  try {
+    await fetch(`/api/telegram/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: "Markdown", disable_web_page_preview: true }),
+    });
+  } catch (e) {
+    console.error("[Telegram] send failed:", e);
+  }
+}
+
 // ─── Sound ──────────────────────────────────────────────────────
 let _audioCtx = null;
 function getAudioCtx() {
@@ -187,9 +230,13 @@ function StatCard({ label, value, sub, color = C.text, icon }) {
 
 function MarketRow({ market, isSelected, onClick, onPin, onFav, isFav }) {
   const warming = market._warmup;
-  const rawZ = warming ? 0 : robustZ(market.bins.at(-1), market.bins);
-  const z = Math.max(-99, Math.min(99, rawZ)); // clamp display to ±99
-  const hot = !warming && z > 4;
+  const bins = market.bins;
+  const last5 = bins.slice(-5);
+  const prev = bins.slice(0, -5);
+  const recentAvg = last5.reduce((a, b) => a + b, 0) / (last5.length || 1);
+  const baseAvg = Math.max(1, prev.reduce((a, b) => a + b, 0) / (prev.length || 1));
+  const activity = warming ? 0 : recentAvg / baseAvg;
+  const hot = !warming && activity > 4;
   const sus = warming ? 0 : computeSuspicion(market);
   return (
     <div onClick={onClick} style={{
@@ -227,7 +274,7 @@ function MarketRow({ market, isSelected, onClick, onPin, onFav, isFav }) {
         <Sparkline data={market.bins.slice(-20)} hot={hot} />
       </div>
       <div style={{ textAlign: "right" }}>
-        <span style={{ fontSize: 11, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: warming ? C.textDim : z > 6 ? C.danger : z > 4 ? C.warning : C.textDim }}>{warming ? "—" : z.toFixed(1)}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: warming ? C.textDim : activity > 5 ? C.danger : activity > 2 ? C.warning : C.textDim }}>{warming ? "—" : activity >= 10 ? `${Math.round(activity)}x` : activity >= 1.1 ? `${activity.toFixed(1)}x` : "—"}</span>
       </div>
     </div>
   );
@@ -284,7 +331,7 @@ function AlertCard({ alert, onAck }) {
   );
 }
 
-function DetailPanel({ market }) {
+function DetailPanel({ market, telegramCfg }) {
   if (!market) return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: C.textDim, gap: 12, padding: 40, textAlign: "center" }}>
       <DegenLogo size={48} />
@@ -322,7 +369,10 @@ function DetailPanel({ market }) {
       {/* Suspicion Score — centerpiece */}
       <div style={{ background: `${susColor(sus)}08`, border: `1px solid ${susColor(sus)}25`, borderRadius: 10, padding: 14, marginBottom: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Suspicion Score</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Suspicion Score</div>
+            {telegramCfg && <button onClick={() => { const alert = createAlert(market, z, market.bins.at(-1)); sendTelegramMessage(telegramCfg.botToken, telegramCfg.chatId, formatTelegramMessage(alert)); }} style={{ fontSize: 8, padding: "2px 6px", background: C.blue + "22", color: C.blue, border: `1px solid ${C.blue}33`, borderRadius: 3, cursor: "pointer", fontWeight: 700 }}>✈️ Send to Telegram</button>}
+          </div>
           <SuspicionBadge score={sus} />
         </div>
         {/* Breakdown bars */}
@@ -360,30 +410,37 @@ function DetailPanel({ market }) {
       </div>
 
       {/* Volume chart */}
+      {(() => { const dirColor = market.priceChange >= 0 ? C.neon : "#ff88cc"; const gradId = `vGrad-${market.id}`; return (
       <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
         <div style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>Volume / Minute — 90m window</div>
         <ResponsiveContainer width="100%" height={160}>
           <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
-            <defs><linearGradient id="vGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.neon} stopOpacity={0.2} /><stop offset="100%" stopColor={C.neon} stopOpacity={0} /></linearGradient></defs>
+            <defs><linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={dirColor} stopOpacity={0.2} /><stop offset="100%" stopColor={dirColor} stopOpacity={0} /></linearGradient></defs>
             <XAxis dataKey="time" tick={{ fontSize: 8, fill: C.textDim }} axisLine={false} tickLine={false} interval={14} />
             <YAxis tick={{ fontSize: 8, fill: C.textDim }} axisLine={false} tickLine={false} width={28} />
             <Tooltip contentStyle={{ background: C.bgElevated, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 10, color: C.text }} />
             <ReferenceLine y={Math.round(threshold)} stroke={C.danger} strokeDasharray="4 4" label={{ value: "Spike", fill: C.danger, fontSize: 8, position: "insideTopRight" }} />
             <ReferenceLine y={Math.round(med)} stroke={C.textDim} strokeDasharray="2 4" />
-            <Area type="monotone" dataKey="volume" stroke={C.neon} fill="url(#vGrad)" strokeWidth={1.5} dot={false} animationDuration={400} />
+            <Area type="monotone" dataKey="volume" stroke={dirColor} fill={`url(#${gradId})`} strokeWidth={1.5} dot={false} animationDuration={400} />
           </AreaChart>
         </ResponsiveContainer>
-      </div>
+      </div>); })()}
 
-      {/* Bar chart — spike bins highlighted */}
+      {/* Bar chart — spike bins, colored by price direction */}
       <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 10, padding: 12 }}>
-        <div style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>Last 20 Bins — Spike Detection</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em" }}>Last 20 Bins — Spike Detection</div>
+          <div style={{ display: "flex", gap: 8, fontSize: 8, color: C.textDim }}>
+            <span><span style={{ display: "inline-block", width: 8, height: 3, background: C.neon, borderRadius: 1, marginRight: 3 }}/>YES pressure</span>
+            <span><span style={{ display: "inline-block", width: 8, height: 3, background: "#ff88cc", borderRadius: 1, marginRight: 3 }}/>NO pressure</span>
+          </div>
+        </div>
         <ResponsiveContainer width="100%" height={100}>
           <BarChart data={barData} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
             <XAxis dataKey="bin" tick={{ fontSize: 7, fill: C.textDim }} axisLine={false} tickLine={false} interval={3} />
             <YAxis tick={{ fontSize: 7, fill: C.textDim }} axisLine={false} tickLine={false} width={24} />
             <ReferenceLine y={Math.round(threshold)} stroke={C.danger} strokeDasharray="3 3" />
-            <Bar dataKey="vol" radius={[2, 2, 0, 0]}>{barData.map((d, i) => (<Cell key={i} fill={d.isSpike ? C.danger : C.neon} opacity={d.isSpike ? 0.9 : 0.4} />))}</Bar>
+            <Bar dataKey="vol" radius={[2, 2, 0, 0]}>{barData.map((d, i) => (<Cell key={i} fill={market.priceChange >= 0 ? C.neon : "#ff88cc"} opacity={d.isSpike ? 0.9 : 0.4} />))}</Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -401,6 +458,11 @@ export default function DegenDetector() {
   const [sortBy, setSortBy] = useState("suspicion");
   const [conn, setConn] = useState({ polymarket: "loading", kalshi: "loading" });
   const [soundOn, setSoundOn] = useState(true);
+  const [telegramCfg, setTelegramCfg] = useState(() => loadTelegramConfig());
+  const [showTgSettings, setShowTgSettings] = useState(false);
+  const [tgDraft, setTgDraft] = useState({ botToken: "", chatId: "" });
+  const [tgStatus, setTgStatus] = useState(null); // null | "ok" | "error" | "sending"
+  const telegramRef = useRef(telegramCfg);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -414,6 +476,7 @@ export default function DegenDetector() {
   const soundOnRef = useRef(soundOn);
   useEffect(() => { marketsRef.current = markets; }, [markets]);
   useEffect(() => { soundOnRef.current = soundOn; }, [soundOn]);
+  useEffect(() => { telegramRef.current = telegramCfg; }, [telegramCfg]);
 
   // Keep rolling bin store bounded to currently tracked markets
   useEffect(() => {
@@ -479,6 +542,8 @@ export default function DegenDetector() {
                 const type = ratio >= 50 ? "whale_print" : "volume_spike";
                 const alert = createAlert(m, z, cur, type);
                 if (soundOnRef.current) playAlertSound(alert.severity);
+                const tg = telegramRef.current;
+                if (tg?.botToken && tg?.chatId) sendTelegramMessage(tg.botToken, tg.chatId, formatTelegramMessage(alert));
                 return [alert, ...pa].slice(0, 50);
               });
             }
@@ -531,13 +596,15 @@ export default function DegenDetector() {
       return true;
     }).sort((a, b) => {
       if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      const aFav = isFavorite(a.id), bFav = isFavorite(b.id);
+      if (aFav !== bFav) return aFav ? -1 : 1;
       if (sortBy === "suspicion") return computeSuspicion(b) - computeSuspicion(a);
       if (sortBy === "z") return robustZ(b.bins.at(-1), b.bins) - robustZ(a.bins.at(-1), a.bins);
       if (sortBy === "volume") return b.totalVolume24h - a.totalVolume24h;
       if (sortBy === "leak") return (b.leakProb || 0) - (a.leakProb || 0);
       return 0;
     });
-  }, [markets, filter, sortBy]);
+  }, [markets, filter, sortBy, isFavorite]);
 
   const selected = markets.find((m) => m.id === selectedId);
   const unacked = alerts.filter((a) => !a.acked).length;
@@ -583,6 +650,7 @@ export default function DegenDetector() {
           ))}
           <button onClick={manualRefresh} title="Refresh now" style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.textMuted, borderRadius: 6, padding: "3px 7px", fontSize: 11, cursor: "pointer" }}>🔄</button>
           <button onClick={() => setSoundOn(!soundOn)} style={{ background: soundOn ? C.neonDim : "transparent", border: `1px solid ${soundOn ? C.neon + "33" : C.border}`, color: soundOn ? C.neon : C.textDim, borderRadius: 6, padding: "3px 7px", fontSize: 11, cursor: "pointer" }}>{soundOn ? "🔔" : "🔕"}</button>
+          <button onClick={() => { setShowTgSettings(!showTgSettings); if (!showTgSettings && telegramCfg) setTgDraft({ botToken: telegramCfg.botToken, chatId: telegramCfg.chatId }); }} style={{ background: telegramCfg ? `${C.blue}22` : "transparent", border: `1px solid ${telegramCfg ? C.blue + "33" : C.border}`, color: telegramCfg ? C.blue : C.textDim, borderRadius: 6, padding: "3px 7px", fontSize: 11, cursor: "pointer" }} title="Telegram alerts">{telegramCfg ? "✈️" : "⚙️"}</button>
           <div style={{ display: "flex", background: C.border, borderRadius: 6, padding: 2 }}>
             {["dashboard", "alerts", "favorites", "history"].map((v) => (
               <button key={v} onClick={() => setView(v)} style={{ padding: "4px 12px", fontSize: 10, fontWeight: 700, background: view === v ? C.bgCard : "transparent", color: view === v ? C.text : C.textMuted, border: "none", borderRadius: 4, cursor: "pointer", position: "relative", textTransform: "uppercase", letterSpacing: "0.04em" }}>
@@ -592,6 +660,33 @@ export default function DegenDetector() {
           </div>
         </div>
       </header>
+
+      {/* Telegram settings panel */}
+      {showTgSettings && (
+        <div style={{ padding: "10px 14px", background: C.bgCard, borderBottom: `1px solid ${C.border}`, animation: "slide-in 0.15s ease-out" }}>
+          <div style={{ maxWidth: 480, margin: "0 auto" }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>Telegram Alerts</div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+              <input type="password" placeholder="Bot Token (from @BotFather)" value={tgDraft.botToken} onChange={(e) => setTgDraft({ ...tgDraft, botToken: e.target.value })}
+                style={{ flex: 2, padding: "5px 8px", fontSize: 10, background: C.bgElevated, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, outline: "none", fontFamily: "'Azeret Mono', monospace" }} />
+              <input type="text" placeholder="Chat ID (from @userinfobot)" value={tgDraft.chatId} onChange={(e) => setTgDraft({ ...tgDraft, chatId: e.target.value })}
+                style={{ flex: 1, padding: "5px 8px", fontSize: 10, background: C.bgElevated, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, outline: "none", fontFamily: "'Azeret Mono', monospace" }} />
+            </div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <button onClick={() => { const cfg = { botToken: tgDraft.botToken.trim(), chatId: tgDraft.chatId.trim() }; if (!cfg.botToken || !cfg.chatId) return; saveTelegramConfig(cfg); setTelegramCfg(cfg); setTgStatus("ok"); setTimeout(() => setTgStatus(null), 2000); }}
+                style={{ padding: "4px 12px", fontSize: 10, fontWeight: 700, background: C.neon + "22", color: C.neon, border: `1px solid ${C.neon}33`, borderRadius: 4, cursor: "pointer" }}>Save</button>
+              <button onClick={async () => { const t = tgDraft.botToken.trim(); const c = tgDraft.chatId.trim(); if (!t || !c) return; setTgStatus("sending"); try { const res = await fetch(`/api/telegram/bot${t}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: c, text: "✅ DegenDetector connected! You'll receive alerts here when insider activity is detected.", disable_web_page_preview: true }) }); setTgStatus(res.ok ? "ok" : "error"); } catch { setTgStatus("error"); } setTimeout(() => setTgStatus(null), 3000); }}
+                style={{ padding: "4px 12px", fontSize: 10, fontWeight: 700, background: C.blue + "22", color: C.blue, border: `1px solid ${C.blue}33`, borderRadius: 4, cursor: "pointer" }}>{tgStatus === "sending" ? "..." : "Test"}</button>
+              {telegramCfg && <button onClick={() => { saveTelegramConfig(null); setTelegramCfg(null); setTgDraft({ botToken: "", chatId: "" }); setTgStatus(null); }}
+                style={{ padding: "4px 12px", fontSize: 10, fontWeight: 700, background: C.danger + "22", color: C.danger, border: `1px solid ${C.danger}33`, borderRadius: 4, cursor: "pointer" }}>Clear</button>}
+              {tgStatus === "ok" && <span style={{ fontSize: 9, color: C.neon, fontWeight: 600 }}>Connected</span>}
+              {tgStatus === "error" && <span style={{ fontSize: 9, color: C.danger, fontWeight: 600 }}>Failed — check token & chat ID</span>}
+              <span style={{ flex: 1 }} />
+              <span style={{ fontSize: 8, color: C.textDim }}>Get a bot token from @BotFather · Get your chat ID from @userinfobot</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Error banner */}
       {fetchError && (
@@ -630,7 +725,7 @@ export default function DegenDetector() {
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1.5fr) 56px 62px 64px 90px 44px", gap: 5, padding: "5px 10px", fontSize: 8, fontWeight: 800, color: C.textDim, textTransform: "uppercase", letterSpacing: "0.07em", borderBottom: `1px solid ${C.border}`, background: `${C.bgCard}88` }}>
-              <span>Market</span><span>Sus</span><span style={{ textAlign: "right" }}>Price</span><span className="dd-col-vol" style={{ textAlign: "right" }}>Vol</span><span className="dd-col-spark" style={{ textAlign: "right" }}>Trend</span><span style={{ textAlign: "right" }}>Z</span>
+              <span>Market</span><span>Sus</span><span style={{ textAlign: "right" }}>Yes ¢</span><span className="dd-col-vol" style={{ textAlign: "right" }}>Vol</span><span className="dd-col-spark" style={{ textAlign: "right" }}>Trend</span><span style={{ textAlign: "right" }}>Activity</span>
             </div>
             <div style={{ flex: 1, overflowY: "auto" }}>
               {filtered.map((m) => (<MarketRow key={m.id} market={m} isSelected={m.id === selectedId} onClick={() => setSelectedId(m.id)} onPin={togglePin} onFav={toggleFavorite} isFav={isFavorite(m.id)} />))}
@@ -638,7 +733,7 @@ export default function DegenDetector() {
               {!loading && filtered.length === 0 && (<div style={{ padding: 40, textAlign: "center", color: C.textDim }}>No markets match filters</div>)}
             </div>
           </div>
-          <div className="dd-hide-mobile" style={{ flex: "1 1 44%", minWidth: 0, overflow: "hidden" }}><DetailPanel market={selected} /></div>
+          <div className="dd-hide-mobile" style={{ flex: "1 1 44%", minWidth: 0, overflow: "hidden" }}><DetailPanel market={selected} telegramCfg={telegramCfg} /></div>
         </div>
       ) : view === "favorites" ? (
         <div style={{ flex: 1, overflowY: "auto", padding: 14 }}>
