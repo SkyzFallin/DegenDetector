@@ -30,6 +30,11 @@ function saveWalletCache() {
 const _tradeCache = new Map(); // conditionId → { ts, trades, analysis }
 const TRADE_CACHE_TTL = 30000; // 30 seconds
 
+// RPC health — disable if first batch fails (avoid spamming broken endpoint)
+let _rpcHealthy = true;
+let _rpcLastCheck = 0;
+const RPC_RETRY_INTERVAL = 300000; // Retry RPC after 5 min if it was down
+
 // ─── Polymarket Data API ────────────────────────────────────
 
 /**
@@ -75,6 +80,11 @@ export async function checkWalletFreshness(address) {
     return { address, txCount: cached.txCount, isFresh: cached.txCount < 5 };
   }
 
+  // Skip RPC if endpoint is down (retry every 5 min)
+  if (!_rpcHealthy && Date.now() - _rpcLastCheck < RPC_RETRY_INTERVAL) {
+    return { address, txCount: -1, isFresh: false };
+  }
+
   try {
     const res = await fetch(POLYGON_RPC, {
       method: "POST",
@@ -86,11 +96,16 @@ export async function checkWalletFreshness(address) {
     const txCount = parseInt(data.result || "0x0", 16);
     cache[address] = { txCount, ts: Date.now() };
     _walletCache = cache;
+    _rpcHealthy = true;
     saveWalletCache();
     return { address, txCount, isFresh: txCount < 5 };
   } catch (e) {
-    // On failure, assume not fresh (conservative — don't false-flag)
-    return { address, txCount: 999, isFresh: false };
+    // On failure, mark RPC as unhealthy and cache failure to avoid spam
+    _rpcHealthy = false;
+    _rpcLastCheck = Date.now();
+    cache[address] = { txCount: -1, ts: Date.now() };
+    _walletCache = cache;
+    return { address, txCount: -1, isFresh: false };
   }
 }
 
