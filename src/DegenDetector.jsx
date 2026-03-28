@@ -477,7 +477,7 @@ function DetailPanel({ market, telegramCfg }) {
         <StatCard label="Z-Score" value={z.toFixed(1)} color={z > 6 ? C.danger : C.neon} icon="📐" />
         <StatCard label="24h Vol" value={fmtN(market.totalVolume24h)} icon="📊" />
         <StatCard label="$ Vol" value={`$${fmtN(market.dollarVolume24h)}`} icon="💰" />
-        <StatCard label="OI" value={fmtN(market.oi)} sub={`${market.oiChange >= 0 ? "+" : ""}${fmtN(market.oiChange)}`} icon="🎯" />
+        <StatCard label="Spread" value={`${((market.spread || 0) * 100).toFixed(1)}¢`} sub={market.bestBid && market.bestAsk ? `${(market.bestBid * 100).toFixed(0)}/${(market.bestAsk * 100).toFixed(0)}` : ""} color={(market.spread || 0) > 0.05 ? C.warning : C.textMuted} icon="↔️" />
         <StatCard label="Leak Prob" value={`${Math.round(market.leakProb * 100)}%`} color={market.leakProb > 0.7 ? C.warning : C.textMuted} icon="🔓" />
       </div>
 
