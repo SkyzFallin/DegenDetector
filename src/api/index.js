@@ -221,27 +221,26 @@ export async function refreshMarkets(existingMarkets, favoriteIds = new Set()) {
   }
 
   // Wallet intelligence: analyze top Polymarket markets (throttled to every 30s)
+  // Results stored in _walletResults cache so they persist across poll cycles
   const now = Date.now();
   if (now - _lastWalletScan > 30000) {
     _lastWalletScan = now;
-    // Top 20 Polymarket markets by volume that have a conditionId
     const polyMarkets = merged
       .filter((m) => m.venue === "Polymarket" && m.conditionId && !m._closedAt)
       .sort((a, b) => b.totalVolume24h - a.totalVolume24h)
       .slice(0, 20);
-    // Fire-and-forget: don't block the refresh cycle
+    // Fire-and-forget: results land in _walletResults for next poll cycle
     Promise.all(polyMarkets.map(async (m) => {
       try {
         const wr = await analyzeMarketWallets(m.conditionId);
-        if (wr) m.walletRisk = wr;
+        if (wr && wr.uniqueWallets > 0) _walletResults.set(m.conditionId, wr);
       } catch {}
     })).then(() => pruneWalletCache());
   }
-  // Carry forward previous walletRisk data for markets not re-analyzed this cycle
+  // Attach wallet data from cache (available from previous scan cycle)
   for (const m of merged) {
-    if (!m.walletRisk) {
-      const prev = existingMap.get(m.id);
-      if (prev?.walletRisk) m.walletRisk = prev.walletRisk;
+    if (m.conditionId && _walletResults.has(m.conditionId)) {
+      m.walletRisk = _walletResults.get(m.conditionId);
     }
   }
 
@@ -249,6 +248,7 @@ export async function refreshMarkets(existingMarkets, favoriteIds = new Set()) {
 }
 
 let _lastWalletScan = 0;
+const _walletResults = new Map(); // conditionId → walletRisk analysis
 
 /**
  * Clean up bin state for markets no longer tracked.
