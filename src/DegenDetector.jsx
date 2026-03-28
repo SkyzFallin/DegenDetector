@@ -87,7 +87,7 @@ function computeSuspicion(market) {
   const leakComponent = (market.leakProb || 0.5) * 15;
 
   // 5. Off-hours bonus (0-10)
-  const hour = new Date().getHours();
+  const hour = new Date().getUTCHours();
   const offHours = (hour >= 22 || hour <= 6) ? 10 : (hour >= 20 || hour <= 8) ? 5 : 0;
 
   // 6. No-news flag (0-10)
@@ -122,8 +122,8 @@ function analyzeSpike(market) {
   const flags = [];
   if (ratio > 10) flags.push({ icon: "⚡", text: `${Math.round(ratio)}x baseline volume`, detail: `Went from ~${Math.round(baseAvg)} to ${Math.round(recentAvg)} contracts/min` });
   if (Math.abs(market.priceChange) > 0.04) flags.push({ icon: market.priceChange > 0 ? "📈" : "📉", text: "Strong directional conviction", detail: `${market.priceChange > 0 ? "+" : ""}${(market.priceChange * 100).toFixed(1)}¢ — one-sided buying` });
-  if (!market.hasRecentNews) flags.push({ icon: "🔇", text: "No correlated news detected", detail: "Volume precedes public information" });
-  const hour = new Date().getHours();
+  if (!market.hasRecentNews) flags.push({ icon: "🔇", text: "No correlated news detected (heuristic)", detail: "Volume precedes public information — inferred from price stability" });
+  const hour = new Date().getUTCHours();
   if (hour >= 22 || hour <= 6) flags.push({ icon: "🌙", text: "Off-hours activity", detail: "Spike during low-traffic window" });
   if (market.leakProb > 0.7) flags.push({ icon: "🔓", text: "High leak-probability market", detail: `${market.category} decisions often leak pre-announcement` });
   if (bins.at(-1) > market.baseVolume * 50) flags.push({ icon: "🐋", text: "Whale-sized print", detail: `${bins.at(-1)} contracts — ${Math.round(bins.at(-1) / (market.baseVolume || 1))}x normal` });
@@ -414,7 +414,7 @@ function DetailPanel({ market }) {
             { label: "Z-Score", val: clamp(z / 12, 0, 1) * 20, max: 20, col: C.warning },
             { label: "Conviction", val: clamp(Math.abs(market.priceChange) / 0.10, 0, 1) * 20, max: 20, col: C.blue },
             { label: "Leak Prob", val: (market.leakProb || 0.5) * 15, max: 15, col: C.poly },
-            { label: "Off-hrs", val: (() => { const hr = new Date().getHours(); return (hr >= 22 || hr <= 6) ? 10 : (hr >= 20 || hr <= 8) ? 5 : 0; })(), max: 10, col: C.kalshi },
+            { label: "Off-hrs", val: (() => { const hr = new Date().getUTCHours(); return (hr >= 22 || hr <= 6) ? 10 : (hr >= 20 || hr <= 8) ? 5 : 0; })(), max: 10, col: C.kalshi },
             { label: "No News", val: market.hasRecentNews ? 0 : 10, max: 10, col: C.neon },
           ].map((c) => (
             <div key={c.label} style={{ flex: c.max, display: "flex", flexDirection: "column", gap: 2 }}>
@@ -483,6 +483,9 @@ export default function DegenDetector() {
   const [conn, setConn] = useState({ polymarket: "loading", kalshi: "loading" });
   const [soundOn, setSoundOn] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [monitoringSince] = useState(() => Date.now());
   const tickRef = useRef(0);
   const frozenRef = useRef(false);
   const marketsRef = useRef(markets);
@@ -504,11 +507,14 @@ export default function DegenDetector() {
         if (!cancelled) {
           setMarkets(data);
           setConn({ polymarket: "live", kalshi: "live" });
+          setLastUpdated(Date.now());
+          setFetchError(null);
           setLoading(false);
         }
       } catch (err) {
         console.error("[DegenDetector] initial fetch failed:", err);
         setConn({ polymarket: "error", kalshi: "error" });
+        setFetchError("Failed to load markets. Check your connection and try again.");
         setLoading(false);
       }
     })();
@@ -555,8 +561,11 @@ export default function DegenDetector() {
         });
 
         setConn({ polymarket: "live", kalshi: "live" });
+        setLastUpdated(Date.now());
+        setFetchError(null);
       } catch (err) {
         console.error("[DegenDetector] refresh failed:", err);
+        setFetchError("Data refresh failed — showing stale data. Retrying...");
       }
     }, 10000);
     return () => clearInterval(iv);
@@ -564,6 +573,17 @@ export default function DegenDetector() {
 
   const ackAlert = useCallback((id) => setAlerts((p) => p.map((a) => a.id === id ? { ...a, acked: true } : a)), []);
   const togglePin = useCallback((id) => setMarkets((p) => p.map((m) => m.id === id ? { ...m, pinned: !m.pinned } : m)), []);
+  const manualRefresh = useCallback(async () => {
+    try {
+      const updated = await refreshMarkets(marketsRef.current);
+      setMarkets(updated);
+      setLastUpdated(Date.now());
+      setFetchError(null);
+      setConn({ polymarket: "live", kalshi: "live" });
+    } catch (err) {
+      setFetchError("Manual refresh failed.");
+    }
+  }, []);
 
   const filtered = useMemo(() => {
     return markets.filter((m) => {
@@ -623,6 +643,7 @@ export default function DegenDetector() {
               <span style={{ fontSize: 9, color: C.textMuted, textTransform: "capitalize" }}>{v}</span>
             </div>
           ))}
+          <button onClick={manualRefresh} title="Refresh now" style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.textMuted, borderRadius: 6, padding: "3px 7px", fontSize: 11, cursor: "pointer" }}>🔄</button>
           <button onClick={() => setSoundOn(!soundOn)} style={{ background: soundOn ? C.neonDim : "transparent", border: `1px solid ${soundOn ? C.neon + "33" : C.border}`, color: soundOn ? C.neon : C.textDim, borderRadius: 6, padding: "3px 7px", fontSize: 11, cursor: "pointer" }}>{soundOn ? "🔔" : "🔕"}</button>
           <div style={{ display: "flex", background: C.border, borderRadius: 6, padding: 2 }}>
             {["dashboard", "alerts"].map((v) => (
@@ -633,6 +654,14 @@ export default function DegenDetector() {
           </div>
         </div>
       </header>
+
+      {/* Error banner */}
+      {fetchError && (
+        <div style={{ padding: "6px 14px", background: C.dangerDim, borderBottom: `1px solid ${C.danger}33`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ fontSize: 11, color: C.danger, fontWeight: 600 }}>⚠️ {fetchError}</span>
+          <button onClick={manualRefresh} style={{ fontSize: 10, padding: "2px 8px", background: C.danger + "22", color: C.danger, border: `1px solid ${C.danger}33`, borderRadius: 4, cursor: "pointer", fontWeight: 700 }}>Retry</button>
+        </div>
+      )}
 
       {/* Stats */}
       <div style={{ display: "flex", gap: 6, padding: "8px 14px", borderBottom: `1px solid ${C.border}`, overflowX: "auto" }}>
@@ -691,9 +720,10 @@ export default function DegenDetector() {
         </div>
       )}
 
-      <footer style={{ padding: "5px 14px", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 8, color: C.textDim, background: `${C.bgCard}aa` }}>
-        <span>DegenDetector v2.0 · Alerts: Z≥8 + Sus≥60 + 2+ flags + 80c floor + 15m cooldown · Robust Z (MAD) · 90 bin window</span>
-        <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 4, height: 4, borderRadius: "50%", background: C.neon, animation: "live-dot 2s infinite" }} />Streaming</span>
+      <footer style={{ padding: "5px 14px", borderTop: `1px solid ${C.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 8, color: C.textDim, background: `${C.bgCard}aa`, gap: 10, flexWrap: "wrap" }}>
+        <span>DegenDetector v2.0 · Z≥8 + Sus≥60 + 2+ flags · Robust Z (MAD) · 90 bin window · Off-hours = UTC</span>
+        <span>Monitoring since {new Date(monitoringSince).toLocaleTimeString()}{lastUpdated ? ` · Updated ${ago(lastUpdated)} ago` : ""}</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 4, height: 4, borderRadius: "50%", background: fetchError ? C.warning : C.neon, animation: fetchError ? "pulse 1s infinite" : "live-dot 2s infinite" }} />{fetchError ? "Degraded" : "Live"}</span>
       </footer>
     </div>
   );
