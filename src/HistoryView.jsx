@@ -395,7 +395,7 @@ export default function HistoryView() {
                     const color = isAuto ? "#ff5500" : C.warning;
                     const icon = isAuto ? "🔒" : "📰";
                     return <ReferenceLine key={a.id} x={binTime} yAxisId="vol" stroke={color} strokeWidth={isAuto ? 3 : 2} strokeDasharray={isAuto ? "none" : "6 3"}
-                      label={{ value: `${icon} ${a.text.slice(0, 30)}`, fill: color, fontSize: 9, fontWeight: 700, position: "top", offset: 8 }} />;
+                      label={{ value: `${icon}`, fill: color, fontSize: 12, fontWeight: 700, position: "top", offset: 4 }} />;
                   })}
 
                   {/* Evidence zones */}
@@ -403,8 +403,7 @@ export default function HistoryView() {
                     const spikeTime = findClosestBinTime(ev.spike.startTs, chartData);
                     const newsTime = findClosestBinTime(ev.annotation.ts, chartData);
                     if (!spikeTime || !newsTime) return null;
-                    return <ReferenceArea key={i} x1={spikeTime} x2={newsTime} yAxisId="vol" fill={C.danger} fillOpacity={0.1}
-                      label={{ value: `${ev.gapMins}min before news`, fill: C.danger, fontSize: 10, fontWeight: 800, position: "insideTop" }} />;
+                    return <ReferenceArea key={i} x1={spikeTime} x2={newsTime} yAxisId="vol" fill={C.danger} fillOpacity={0.1} />;
                   })}
 
                   <Area yAxisId="vol" type="monotone" dataKey="yesVol" stackId="vol" stroke={C.neon} fill={C.neon} fillOpacity={0.3} strokeWidth={1} dot={false} />
@@ -434,6 +433,61 @@ export default function HistoryView() {
                 </div>
               </div>
             </div>
+
+            {/* Pre-Close Trading Analysis — the smoking gun */}
+            {selected?.result && selected?.closeTime && scoredData && (
+              (() => {
+                const closeTs = new Date(selected.closeTime).getTime();
+                const oneHourBefore = closeTs - 3600000;
+                const preCloseBins = scoredData.filter((b) => b.ts >= oneHourBefore && b.ts <= closeTs);
+                const yesTotal = preCloseBins.reduce((s, b) => s + (b.yesVol || 0), 0);
+                const noTotal = preCloseBins.reduce((s, b) => s + (b.noVol || 0), 0);
+                const total = yesTotal + noTotal;
+                if (total === 0) return null;
+                const winSide = selected.result; // "yes" or "no"
+                const winVol = winSide === "yes" ? yesTotal : noTotal;
+                const winPct = Math.round((winVol / total) * 100);
+                // Estimate average price from the chart data
+                const avgPrice = preCloseBins.filter((b) => b.price).reduce((s, b) => s + b.price, 0) / (preCloseBins.filter((b) => b.price).length || 1);
+                const estProfit = Math.round(winVol * (1 - avgPrice));
+                const insiderLikely = winPct > 55;
+
+                return (
+                  <div style={{ background: insiderLikely ? `${C.danger}0a` : C.bgCard, border: `1px solid ${insiderLikely ? C.danger + "30" : C.border}`, borderRadius: 10, padding: 14, marginBottom: 14 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: insiderLikely ? C.danger : C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+                      {insiderLikely ? "🚨" : "📊"} Pre-Close Trading Analysis (last 60 min)
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 10 }}>
+                      <div style={{ textAlign: "center", padding: "8px", background: `${C.neon}10`, borderRadius: 6 }}>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: C.neon, fontFamily: "'Azeret Mono', monospace" }}>{yesTotal.toLocaleString()}</div>
+                        <div style={{ fontSize: 9, color: C.textMuted }}>YES contracts bought</div>
+                      </div>
+                      <div style={{ textAlign: "center", padding: "8px", background: "#ff88cc10", borderRadius: 6 }}>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: "#ff88cc", fontFamily: "'Azeret Mono', monospace" }}>{noTotal.toLocaleString()}</div>
+                        <div style={{ fontSize: 9, color: C.textMuted }}>NO contracts bought</div>
+                      </div>
+                      <div style={{ textAlign: "center", padding: "8px", background: `${winSide === "yes" ? C.neon : "#ff88cc"}10`, borderRadius: 6 }}>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: winSide === "yes" ? C.neon : "#ff88cc", fontFamily: "'Azeret Mono', monospace" }}>{winPct}%</div>
+                        <div style={{ fontSize: 9, color: C.textMuted }}>bought the winning side</div>
+                      </div>
+                    </div>
+                    <div style={{ padding: "8px 12px", background: C.bgElevated, borderRadius: 6, fontSize: 11, lineHeight: 1.6 }}>
+                      <div style={{ color: C.text }}>
+                        Market resolved <span style={{ fontWeight: 800, color: winSide === "yes" ? C.neon : "#ff88cc" }}>{winSide.toUpperCase()}</span>.
+                        In the final hour, <span style={{ fontWeight: 700, color: C.text }}>{winVol.toLocaleString()}</span> contracts were bought on the winning side
+                        at an avg price of <span style={{ fontFamily: "'Azeret Mono', monospace", fontWeight: 700 }}>{(avgPrice * 100).toFixed(0)}¢</span>.
+                      </div>
+                      {insiderLikely && (
+                        <div style={{ marginTop: 6, color: C.danger, fontWeight: 700 }}>
+                          Estimated insider profit: <span style={{ fontSize: 14, fontFamily: "'Azeret Mono', monospace" }}>${estProfit.toLocaleString()}</span>
+                          {" "}({winVol.toLocaleString()} contracts × {((1 - avgPrice) * 100).toFixed(0)}¢ payout each)
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()
+            )}
 
             {/* Detected Spikes */}
             {spikes.length > 0 && (
