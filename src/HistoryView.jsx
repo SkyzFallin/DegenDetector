@@ -350,7 +350,7 @@ export default function HistoryView() {
                   <span style={{ width: 14, height: 3, background: C.neon, borderRadius: 2 }} /> YES buys
                 </span>
                 <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textMuted }}>
-                  <span style={{ width: 14, height: 3, background: C.danger, borderRadius: 2 }} /> NO buys
+                  <span style={{ width: 14, height: 3, background: "#ff88cc", borderRadius: 2 }} /> NO buys
                 </span>
                 <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textMuted }}>
                   <span style={{ width: 14, height: 3, background: C.blue, borderRadius: 2 }} /> Price (YES ¢)
@@ -359,7 +359,7 @@ export default function HistoryView() {
                   <span style={{ width: 14, height: 3, background: C.warning, borderRadius: 2, borderStyle: "dashed", borderWidth: 1, borderColor: C.warning }} /> 📰 News annotation
                 </span>
                 <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textMuted }}>
-                  <span style={{ width: 14, height: 3, background: C.danger, borderRadius: 2 }} /> 🔒 Market close / settlement
+                  <span style={{ width: 14, height: 3, background: "#ff5500", borderRadius: 2 }} /> 🔒 Market close / settlement
                 </span>
                 {evidence.length > 0 && (
                   <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textMuted }}>
@@ -391,7 +391,7 @@ export default function HistoryView() {
                     const binTime = findClosestBinTime(a.ts, chartData);
                     if (!binTime) return null;
                     const isAuto = a.auto;
-                    const color = isAuto ? C.danger : C.warning;
+                    const color = isAuto ? "#ff5500" : C.warning;
                     const icon = isAuto ? "🔒" : "📰";
                     return <ReferenceLine key={a.id} x={binTime} yAxisId="vol" stroke={color} strokeWidth={isAuto ? 3 : 2} strokeDasharray={isAuto ? "none" : "6 3"}
                       label={{ value: `${icon} ${a.text.slice(0, 30)}`, fill: color, fontSize: 9, fontWeight: 700, position: "top", offset: 8 }} />;
@@ -407,7 +407,7 @@ export default function HistoryView() {
                   })}
 
                   <Area yAxisId="vol" type="monotone" dataKey="yesVol" stackId="vol" stroke={C.neon} fill={C.neon} fillOpacity={0.3} strokeWidth={1} dot={false} />
-                  <Area yAxisId="vol" type="monotone" dataKey="noVol" stackId="vol" stroke={C.danger} fill={C.danger} fillOpacity={0.3} strokeWidth={1} dot={false} />
+                  <Area yAxisId="vol" type="monotone" dataKey="noVol" stackId="vol" stroke="#ff88cc" fill="#ff88cc" fillOpacity={0.3} strokeWidth={1} dot={false} />
                   <Line yAxisId="price" type="monotone" dataKey="price" stroke={C.blue} strokeWidth={1.5} dot={false} connectNulls />
                 </ComposedChart>
               </ResponsiveContainer>
