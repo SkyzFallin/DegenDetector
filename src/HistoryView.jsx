@@ -228,12 +228,12 @@ export default function HistoryView() {
     if (!scoredData || scoredData.length === 0) return [];
     let data = scoredData;
 
-    // Apply zoom: center on close time (or last annotation, or end of data)
+    // Apply zoom: show X hours BEFORE close, 10 min after
     if (zoomHours) {
       const closeAnno = annotations.find((a) => a.auto);
-      const centerTs = closeAnno ? closeAnno.ts : data[data.length - 1].ts;
-      const halfWindow = zoomHours * 3600000 / 2;
-      data = data.filter((d) => d.ts >= centerTs - halfWindow && d.ts <= centerTs + halfWindow / 4);
+      const anchorTs = closeAnno ? closeAnno.ts : data[data.length - 1].ts;
+      const windowMs = zoomHours * 3600000;
+      data = data.filter((d) => d.ts >= anchorTs - windowMs && d.ts <= anchorTs + 600000);
       if (data.length === 0) data = scoredData; // fallback
     }
 
@@ -281,11 +281,11 @@ export default function HistoryView() {
                     if (m.closeTime) autoAnnotations.push({ id: uid(), text: `Result confirmed${m.result ? ` — ${m.result.toUpperCase()} wins` : ""} · Betting stopped`, ts: new Date(m.closeTime).getTime(), auto: true });
                     // Clear all annotations (including preset news) and only show the real close marker
                     setAnnotations(autoAnnotations);
-                    // Auto-zoom date range and auto-fetch
+                    // Auto-zoom: 4 hours before close → 15 min after (no wasted space)
                     let dr = dateRange;
                     if (m.closeTime) {
                       const closeMs = new Date(m.closeTime).getTime();
-                      dr = { start: new Date(closeMs - 12 * 3600000).toISOString().slice(0, 16), end: new Date(closeMs + 1 * 3600000).toISOString().slice(0, 16) };
+                      dr = { start: new Date(closeMs - 4 * 3600000).toISOString().slice(0, 16), end: new Date(closeMs + 15 * 60000).toISOString().slice(0, 16) };
                       setDateRange(dr);
                     }
                     // Auto-fetch immediately with the market and date range
