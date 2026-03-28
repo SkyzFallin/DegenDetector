@@ -301,11 +301,15 @@ export function computeRetroactiveScores(bins, marketMeta) {
 
     // Build a synthetic market object for computeSuspicion
     const prevPrice = bins[i - 1]?.price ?? bin.price;
+    const priceChange = (bin.price || 0) - (prevPrice || 0);
+    // Heuristic: if there's a big price move AND volume, news likely drove it
+    // Only flag "no news" when volume spikes WITHOUT a corresponding price move
+    const hasNews = Math.abs(priceChange) > 0.02;
     const syntheticMarket = {
       bins: [...window, currentVol],
-      priceChange: (bin.price || 0) - (prevPrice || 0),
+      priceChange,
       leakProb,
-      hasRecentNews: false, // conservative — assume no news for historical
+      hasRecentNews: hasNews,
       category: marketMeta.category,
       baseVolume: Math.max(1, window.reduce((a, b) => a + b, 0) / window.length),
     };

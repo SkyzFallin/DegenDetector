@@ -329,54 +329,70 @@ export default function HistoryView() {
                 )}
               </div>
 
-              <ResponsiveContainer width="100%" height={280}>
-                <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 4, left: 4 }}>
+              {/* Main chart: Volume + Price only */}
+              <ResponsiveContainer width="100%" height={220}>
+                <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 4 }}>
                   <defs>
                     <linearGradient id="histVol" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor={C.neon} stopOpacity={0.3} />
                       <stop offset="100%" stopColor={C.neon} stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="time" tick={{ fontSize: 8, fill: C.textDim }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
-                  <YAxis yAxisId="vol" tick={{ fontSize: 8, fill: C.textDim }} axisLine={false} tickLine={false} width={35} />
-                  <YAxis yAxisId="price" orientation="right" tick={{ fontSize: 8, fill: C.textDim }} axisLine={false} tickLine={false} width={35} domain={[0, 1]} />
+                  <XAxis dataKey="time" tick={{ fontSize: 7, fill: C.textDim }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                  <YAxis yAxisId="vol" tick={{ fontSize: 8, fill: C.textDim }} axisLine={false} tickLine={false} width={35} label={{ value: "Volume", angle: -90, position: "insideLeft", fill: C.textDim, fontSize: 8 }} />
+                  <YAxis yAxisId="price" orientation="right" tick={{ fontSize: 8, fill: C.textDim }} axisLine={false} tickLine={false} width={35} domain={[0, 1]} label={{ value: "Price", angle: 90, position: "insideRight", fill: C.textDim, fontSize: 8 }} />
                   <Tooltip
                     contentStyle={{ background: C.bgElevated, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 10, color: C.text }}
                     labelFormatter={(label) => `${label} UTC`}
                     formatter={(val, name) => {
-                      if (name === "volume") return [val, "Volume"];
+                      if (name === "volume") return [val, "Contracts"];
                       if (name === "price") return [typeof val === "number" ? `${(val * 100).toFixed(1)}¢` : "—", "Price"];
-                      if (name === "suspicion") return [val, "Suspicion"];
                       return [val, name];
                     }}
                   />
 
-                  {/* News annotation markers — bright yellow vertical lines with full date */}
+                  {/* News annotation markers */}
                   {annotations.map((a) => {
                     const binTime = findClosestBinTime(a.ts, chartData);
                     if (!binTime) return null;
                     return <ReferenceLine key={a.id} x={binTime} yAxisId="vol" stroke={C.warning} strokeWidth={2} strokeDasharray="6 3"
-                      label={{ value: `📰 ${a.text.slice(0, 25)} — ${fmtTs(a.ts)}`, fill: C.warning, fontSize: 9, fontWeight: 700, position: "top", offset: 8 }} />;
+                      label={{ value: `📰 ${a.text.slice(0, 25)}`, fill: C.warning, fontSize: 9, fontWeight: 700, position: "top", offset: 8 }} />;
                   })}
 
-                  {/* Evidence zones — red shading between spike start and news */}
+                  {/* Evidence zones */}
                   {evidence.map((ev, i) => {
                     const spikeTime = findClosestBinTime(ev.spike.startTs, chartData);
                     const newsTime = findClosestBinTime(ev.annotation.ts, chartData);
                     if (!spikeTime || !newsTime) return null;
-                    return <ReferenceArea key={i} x1={spikeTime} x2={newsTime} yAxisId="vol" fill={C.danger} fillOpacity={0.12}
-                      label={{ value: `${ev.gapMins}min gap`, fill: C.danger, fontSize: 10, fontWeight: 800, position: "insideTop" }} />;
+                    return <ReferenceArea key={i} x1={spikeTime} x2={newsTime} yAxisId="vol" fill={C.danger} fillOpacity={0.1}
+                      label={{ value: `${ev.gapMins}min before news`, fill: C.danger, fontSize: 10, fontWeight: 800, position: "insideTop" }} />;
                   })}
 
-                  <Area yAxisId="vol" type="monotone" dataKey="volume" stroke={C.neon} fill="url(#histVol)" strokeWidth={1} dot={false} />
-                  <Line yAxisId="price" type="monotone" dataKey="price" stroke={C.blue} strokeWidth={1} dot={false} connectNulls />
-                  <Bar yAxisId="vol" dataKey="suspicion" opacity={0.6} radius={[1, 1, 0, 0]}>
-                    {chartData.map((d, i) => (
-                      <Cell key={i} fill={susColor(d.suspicion)} />
-                    ))}
-                  </Bar>
+                  <Area yAxisId="vol" type="monotone" dataKey="volume" stroke={C.neon} fill="url(#histVol)" strokeWidth={1.5} dot={false} />
+                  <Line yAxisId="price" type="monotone" dataKey="price" stroke={C.blue} strokeWidth={1.5} dot={false} connectNulls />
                 </ComposedChart>
               </ResponsiveContainer>
+
+              {/* Suspicion heatmap strip — separate from volume chart */}
+              <div style={{ marginTop: 4, marginBottom: 4 }}>
+                <div style={{ fontSize: 8, color: C.textDim, marginBottom: 2, paddingLeft: 4 }}>SUSPICION SCORE</div>
+                <div style={{ display: "flex", height: 14, borderRadius: 3, overflow: "hidden" }}>
+                  {chartData.map((d, i) => (
+                    <div key={i} style={{ flex: 1, background: d.suspicion > 20 ? susColor(d.suspicion) : C.border, opacity: d.suspicion > 20 ? 0.7 : 0.3 }}
+                      title={`${d.time}: Sus ${d.suspicion}`} />
+                  ))}
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 7, color: C.textDim, marginTop: 1 }}>
+                  <span>{chartData[0]?.time}</span>
+                  <span style={{ display: "flex", gap: 8 }}>
+                    <span style={{ color: "#335566" }}>■ Low</span>
+                    <span style={{ color: "#ccaa00" }}>■ Elevated</span>
+                    <span style={{ color: "#ff8800" }}>■ High</span>
+                    <span style={{ color: "#ff0033" }}>■ Extreme</span>
+                  </span>
+                  <span>{chartData[chartData.length - 1]?.time}</span>
+                </div>
+              </div>
             </div>
 
             {/* Detected Spikes */}
