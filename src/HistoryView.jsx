@@ -65,6 +65,7 @@ const PRESETS = [
     label: "Fed Chair Nomination — Warsh",
     description: "3,252-contract whale print at 14:10 UTC. News broke ~15:00. One hour of insider advantage.",
     search: "fed chair",
+    ticker: "KXFEDCHAIRNOM-29-KW",
     venue: "Kalshi",
     dateStart: "2026-03-05T08:00",
     dateEnd: "2026-03-05T20:00",
