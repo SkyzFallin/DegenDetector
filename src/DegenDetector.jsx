@@ -277,6 +277,7 @@ function MarketRow({ market, isSelected, onClick, onPin, onFav, isFav }) {
       <div style={{ textAlign: "right" }}>
         <div style={{ fontSize: 12, fontWeight: 700, fontFamily: "'Azeret Mono', monospace", color: C.text }}>{fmtP(market.price)}</div>
         <div style={{ fontSize: 9.5, fontFamily: "'Azeret Mono', monospace", fontWeight: 600, color: market.priceChange >= 0 ? C.neon : C.danger }}>{market.priceChange >= 0 ? "+" : ""}{(market.priceChange * 100).toFixed(1)}¢</div>
+        {market.bestBid > 0 && market.bestAsk > 0 && <div style={{ fontSize: 7.5, fontFamily: "'Azeret Mono', monospace", color: (market.spread || 0) > 0.05 ? C.warning : C.textDim }}>{(market.bestBid * 100).toFixed(0)}↔{(market.bestAsk * 100).toFixed(0)}</div>}
       </div>
       <div className="dd-col-vol" style={{ textAlign: "right" }}>
         <div style={{ fontSize: 10.5, fontFamily: "'Azeret Mono', monospace", color: C.textMuted }}>{fmtN(market.totalVolume24h)}</div>
@@ -477,7 +478,7 @@ function DetailPanel({ market, telegramCfg }) {
         <StatCard label="Z-Score" value={z.toFixed(1)} color={z > 6 ? C.danger : C.neon} icon="📐" />
         <StatCard label="24h Vol" value={fmtN(market.totalVolume24h)} icon="📊" />
         <StatCard label="$ Vol" value={`$${fmtN(market.dollarVolume24h)}`} icon="💰" />
-        <StatCard label="Spread" value={`${((market.spread || 0) * 100).toFixed(1)}¢`} sub={market.bestBid && market.bestAsk ? `${(market.bestBid * 100).toFixed(0)}/${(market.bestAsk * 100).toFixed(0)}` : ""} color={(market.spread || 0) > 0.05 ? C.warning : C.textMuted} icon="↔️" />
+        <StatCard label="Spread" value={`${((market.spread || 0) * 100).toFixed(1)}¢`} sub={market.bestBid && market.bestAsk ? `Buy ${(market.bestAsk * 100).toFixed(1)}¢ · Sell ${(market.bestBid * 100).toFixed(1)}¢` : ""} color={(market.spread || 0) > 0.05 ? C.warning : C.textMuted} icon="↔️" />
         <StatCard label="Leak Prob" value={`${Math.round(market.leakProb * 100)}%`} color={market.leakProb > 0.7 ? C.warning : C.textMuted} icon="🔓" />
       </div>
 
