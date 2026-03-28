@@ -86,6 +86,9 @@ async function searchKalshi(kw) {
             status: m.status || "unknown",
             endDate: m.expiration_time || m.close_time,
             volume: parseFloat(m.volume_fp) || 0,
+            result: m.result || null,
+            closeTime: m.close_time || null,
+            settlementTs: m.settlement_ts || null,
           });
         }
         if (results.length >= 50) break;

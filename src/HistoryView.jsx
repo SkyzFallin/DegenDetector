@@ -257,7 +257,15 @@ export default function HistoryView() {
           {results.length > 0 && !selected && (
             <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, maxHeight: 240, overflowY: "auto" }}>
               {results.map((m) => (
-                <div key={m.id} onClick={() => { setSelected(m); setResults([]); }}
+                <div key={m.id} onClick={() => {
+                    setSelected(m);
+                    setResults([]);
+                    // Auto-add close/settlement markers for settled Kalshi markets
+                    const autoAnnotations = [];
+                    if (m.closeTime) autoAnnotations.push({ id: uid(), text: `Market closed${m.result ? ` (${m.result})` : ""}`, ts: new Date(m.closeTime).getTime(), auto: true });
+                    if (m.settlementTs) autoAnnotations.push({ id: uid(), text: "Market settled", ts: new Date(m.settlementTs).getTime(), auto: true });
+                    if (autoAnnotations.length) setAnnotations((prev) => [...prev.filter((a) => !a.auto), ...autoAnnotations]);
+                  }}
                   style={{ padding: "8px 12px", cursor: "pointer", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 8 }}
                   onMouseEnter={(e) => e.currentTarget.style.background = C.bgCardHover}
                   onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
@@ -329,6 +337,27 @@ export default function HistoryView() {
                 )}
               </div>
 
+              {/* Legend */}
+              <div style={{ display: "flex", gap: 14, marginBottom: 6, paddingLeft: 4, flexWrap: "wrap" }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textMuted }}>
+                  <span style={{ width: 14, height: 3, background: C.neon, borderRadius: 2 }} /> Volume (contracts/min)
+                </span>
+                <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textMuted }}>
+                  <span style={{ width: 14, height: 3, background: C.blue, borderRadius: 2 }} /> Price (YES ¢)
+                </span>
+                <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textMuted }}>
+                  <span style={{ width: 14, height: 3, background: C.warning, borderRadius: 2, borderStyle: "dashed", borderWidth: 1, borderColor: C.warning }} /> 📰 News annotation
+                </span>
+                <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textMuted }}>
+                  <span style={{ width: 14, height: 3, background: C.danger, borderRadius: 2 }} /> 🔒 Market close / settlement
+                </span>
+                {evidence.length > 0 && (
+                  <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textMuted }}>
+                    <span style={{ width: 14, height: 8, background: `${C.danger}20`, border: `1px solid ${C.danger}40`, borderRadius: 2 }} /> Insider gap (spike → news)
+                  </span>
+                )}
+              </div>
+
               {/* Main chart: Volume + Price only */}
               <ResponsiveContainer width="100%" height={220}>
                 <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 4 }}>
@@ -351,12 +380,15 @@ export default function HistoryView() {
                     }}
                   />
 
-                  {/* News annotation markers */}
+                  {/* News + settlement markers */}
                   {annotations.map((a) => {
                     const binTime = findClosestBinTime(a.ts, chartData);
                     if (!binTime) return null;
-                    return <ReferenceLine key={a.id} x={binTime} yAxisId="vol" stroke={C.warning} strokeWidth={2} strokeDasharray="6 3"
-                      label={{ value: `📰 ${a.text.slice(0, 25)}`, fill: C.warning, fontSize: 9, fontWeight: 700, position: "top", offset: 8 }} />;
+                    const isAuto = a.auto;
+                    const color = isAuto ? C.danger : C.warning;
+                    const icon = isAuto ? "🔒" : "📰";
+                    return <ReferenceLine key={a.id} x={binTime} yAxisId="vol" stroke={color} strokeWidth={isAuto ? 3 : 2} strokeDasharray={isAuto ? "none" : "6 3"}
+                      label={{ value: `${icon} ${a.text.slice(0, 30)}`, fill: color, fontSize: 9, fontWeight: 700, position: "top", offset: 8 }} />;
                   })}
 
                   {/* Evidence zones */}
