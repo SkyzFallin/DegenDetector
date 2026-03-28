@@ -76,10 +76,15 @@ async function searchKalshi(kw) {
       for (const m of markets) {
         const title = m.title || evTitle || "";
         if (evMatch || title.toLowerCase().includes(kw) || (m.ticker || "").toLowerCase().includes(kw)) {
+          // Build a descriptive name: "Event Title — Candidate/Subtitle"
+          const sub = m.yes_sub_title || m.no_sub_title || "";
+          const displayName = sub && sub !== title
+            ? `${evTitle || title} — ${sub.slice(0, 40)}`
+            : (title.length < 100 ? title : evTitle || title.slice(0, 80));
           results.push({
             id: m.ticker,
             venue: "Kalshi",
-            name: title.length < 100 ? title : evTitle || title.slice(0, 80),
+            name: displayName,
             ticker: m.ticker,
             eventTicker: ev.ticker,
             category: classifyCategory(`${title} ${ev.category || ""}`),

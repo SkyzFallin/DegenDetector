@@ -255,7 +255,7 @@ export default function HistoryView() {
 
           {/* Results */}
           {results.length > 0 && !selected && (
-            <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, maxHeight: 240, overflowY: "auto" }}>
+            <div style={{ background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 8, maxHeight: 480, overflowY: "auto" }}>
               {results.map((m) => (
                 <div key={m.id} onClick={() => {
                     setSelected(m);
@@ -278,8 +278,9 @@ export default function HistoryView() {
                   onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
                   <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: m.venue === "Polymarket" ? `${C.poly}14` : `${C.kalshi}14`, color: m.venue === "Polymarket" ? C.poly : C.kalshi, fontWeight: 700, textTransform: "uppercase" }}>{m.venue}</span>
                   <span style={{ fontSize: 11, color: C.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.name}</span>
-                  {m.endDate && <span style={{ fontSize: 9, color: C.textDim, fontFamily: "'Azeret Mono', monospace", flexShrink: 0 }}>{new Date(m.endDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })}</span>}
-                  <span style={{ fontSize: 9, color: m.status === "active" ? C.neon : C.textDim, fontWeight: 600 }}>{m.status}</span>
+                  {m.volume > 0 && <span style={{ fontSize: 9, color: C.textDim, fontFamily: "'Azeret Mono', monospace", flexShrink: 0 }}>{m.volume >= 1e6 ? `${(m.volume/1e6).toFixed(1)}M` : m.volume >= 1e3 ? `${(m.volume/1e3).toFixed(0)}K` : m.volume} vol</span>}
+                  {m.result && <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 3, fontWeight: 700, flexShrink: 0, background: m.result === "yes" ? `${C.neon}20` : `${C.danger}20`, color: m.result === "yes" ? C.neon : C.danger }}>{m.result.toUpperCase()}</span>}
+                  <span style={{ fontSize: 9, color: m.status === "active" ? C.neon : C.textDim, fontWeight: 600, flexShrink: 0 }}>{m.status}</span>
                 </div>
               ))}
             </div>
