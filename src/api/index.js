@@ -36,8 +36,7 @@ function saveBinCache() {
     }
     const json = JSON.stringify({ ts: Date.now(), data });
     localStorage.setItem(BIN_CACHE_KEY, json);
-    console.log(`[BinCache] Saved ${Object.keys(data).length} markets (${(json.length / 1024).toFixed(1)} KB)`);
-  } catch (e) { console.error("[BinCache] Save failed:", e); }
+  } catch {}
 }
 
 function restoreBinCache() {
@@ -74,9 +73,7 @@ function restoreBinCache() {
         pollCount: Math.max(saved.pollCount, MIN_POLLS_FOR_ALERTING),
       });
     }
-    console.log(`[BinCache] Restored ${binStore.size} markets (age: ${Math.round(age / 1000)}s)`);
-  } catch (e) {
-    console.error("[BinCache] Restore failed:", e);
+  } catch {
     localStorage.removeItem(BIN_CACHE_KEY);
   }
 }
