@@ -285,8 +285,13 @@ function MarketRow({ market, isSelected, onClick, onPin, onFav, isFav }) {
   );
 }
 
-function AlertCard({ alert, onAck }) {
+function AlertCard({ alert, onAck, market, onView }) {
   const [open, setOpen] = useState(false);
+  const bins = market?.bins;
+  const hasChart = bins && bins.length > 0;
+  const alertMed = hasChart ? median(bins) : 0;
+  const alertThreshold = hasChart ? alertMed + 6 * (mad(bins) / 0.6745) : 0;
+  const dirColor = alert.priceChange >= 0 ? C.neon : "#ff88cc";
   return (
     <div onClick={() => setOpen(!open)} style={{
       padding: "12px 14px", background: C.bgCard,
@@ -309,28 +314,37 @@ function AlertCard({ alert, onAck }) {
           </div>
         </div>
         <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <div style={{ fontSize: 8, color: C.textDim, marginBottom: 1 }}>YES</div>
           <div style={{ fontSize: 16, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: C.text }}>{fmtP(alert.price)}</div>
           <div style={{ fontSize: 11, fontWeight: 600, fontFamily: "'Azeret Mono', monospace", color: alert.priceChange >= 0 ? C.neon : C.danger }}>{alert.priceChange >= 0 ? "+" : ""}{(alert.priceChange * 100).toFixed(1)}¢</div>
         </div>
       </div>
       {open && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
+          {/* Volume chart */}
+          {hasChart && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>Volume / Minute</div>
+              <ResponsiveContainer width="100%" height={90}>
+                <AreaChart data={bins.map((v, i) => ({ time: `${i - bins.length + 1}m`, volume: v }))} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+                  <XAxis dataKey="time" tick={{ fontSize: 7, fill: C.textDim }} axisLine={false} tickLine={false} interval={14} />
+                  <YAxis tick={{ fontSize: 7, fill: C.textDim }} axisLine={false} tickLine={false} width={24} />
+                  <ReferenceLine y={Math.round(alertThreshold)} stroke={C.danger} strokeDasharray="3 3" />
+                  <Area type="monotone" dataKey="volume" stroke={dirColor} fill={dirColor} fillOpacity={0.15} strokeWidth={1.5} dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
           {alert.flags && alert.flags.length > 0 && (
             <div style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 9, fontWeight: 700, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Why this looks suspicious</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{alert.flags.map((f, i) => <SpikeFlag key={i} flag={f} />)}</div>
             </div>
           )}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: 11 }}>
-            <div><div style={{ color: C.textMuted, marginBottom: 2 }}>Baseline Median</div><div style={{ color: C.text, fontFamily: "'Azeret Mono', monospace", fontWeight: 600 }}>{alert.baselineMedian} c/bin</div></div>
-            <div><div style={{ color: C.textMuted, marginBottom: 2 }}>Baseline MAD</div><div style={{ color: C.text, fontFamily: "'Azeret Mono', monospace", fontWeight: 600 }}>{alert.baselineMAD}</div></div>
-            <div><div style={{ color: C.textMuted, marginBottom: 2 }}>Leak Prob</div><div style={{ color: C.text, fontFamily: "'Azeret Mono', monospace", fontWeight: 600 }}>{Math.round((alert.flags?.find(f => f.icon === "🔓") ? 0.8 : 0.5) * 100)}%</div></div>
+          <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+            {onView && <button onClick={(e) => { e.stopPropagation(); onView(alert.marketId); }} style={{ padding: "5px 12px", fontSize: 10, fontWeight: 700, background: C.blue + "22", color: C.blue, border: `1px solid ${C.blue}33`, borderRadius: 6, cursor: "pointer" }}>🔍 View Market</button>}
+            {!alert.acked && <button onClick={(e) => { e.stopPropagation(); onAck(alert.id); }} style={{ padding: "5px 12px", fontSize: 10, fontWeight: 700, background: C.neonDim, color: C.neon, border: `1px solid ${C.neon}33`, borderRadius: 6, cursor: "pointer" }}>✓ ACK</button>}
           </div>
-          {!alert.acked && (
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-              <button onClick={(e) => { e.stopPropagation(); onAck(alert.id); }} style={{ padding: "5px 12px", fontSize: 10, fontWeight: 700, background: C.neonDim, color: C.neon, border: `1px solid ${C.neon}33`, borderRadius: 6, cursor: "pointer" }}>✓ ACK</button>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -816,7 +830,7 @@ export default function DegenDetector() {
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {[...alerts].sort((a, b) => b.suspicion - a.suspicion).map((a) => (<AlertCard key={a.id} alert={a} onAck={ackAlert} />))}
+                {[...alerts].sort((a, b) => b.suspicion - a.suspicion).map((a) => (<AlertCard key={a.id} alert={a} onAck={ackAlert} market={markets.find((m) => m.id === a.marketId)} onView={(id) => { setSelectedId(id); setView("dashboard"); }} />))}
               </div>
             )}
           </div>
