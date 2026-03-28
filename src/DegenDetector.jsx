@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import * as recharts from "recharts";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell } from "recharts";
 import { fetchAllMarkets, refreshMarkets, pruneStale } from "./api/index.js";
-
-const { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell } = recharts;
 
 // ─── Theme ──────────────────────────────────────────────────────
 const C = {
@@ -40,7 +38,7 @@ const CATEGORIES = ["Regulatory", "Political", "Financial", "Legal", "Geopolitic
 // Markets are now fetched live from Polymarket + Kalshi APIs
 
 // ─── Utilities ──────────────────────────────────────────────────
-const uid = () => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9);
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 11));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 function median(a) {
@@ -491,6 +489,11 @@ export default function DegenDetector() {
   const soundOnRef = useRef(soundOn);
   useEffect(() => { marketsRef.current = markets; }, [markets]);
   useEffect(() => { soundOnRef.current = soundOn; }, [soundOn]);
+
+  // Keep rolling bin store bounded to currently tracked markets
+  useEffect(() => {
+    pruneStale(markets.map((m) => m.id));
+  }, [markets]);
 
   // ─── Initial fetch ──────────────────────────────────────────
   useEffect(() => {
