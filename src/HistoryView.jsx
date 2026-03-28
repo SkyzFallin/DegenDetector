@@ -411,7 +411,7 @@ export default function HistoryView() {
               </div>
 
               {/* Main chart: Volume + Price only */}
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={300}>
                 <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 4 }}>
                   {/* No gradient defs needed — using solid fills with opacity */}
                   <XAxis dataKey="time" tick={{ fontSize: 7, fill: C.textDim }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
@@ -447,9 +447,9 @@ export default function HistoryView() {
                     return <ReferenceArea key={i} x1={spikeTime} x2={newsTime} yAxisId="vol" fill={C.danger} fillOpacity={0.1} />;
                   })}
 
-                  <Area yAxisId="vol" type="monotone" dataKey="yesVol" stackId="vol" stroke={C.neon} fill={C.neon} fillOpacity={0.3} strokeWidth={1} dot={false} />
-                  <Area yAxisId="vol" type="monotone" dataKey="noVol" stackId="vol" stroke="#ff88cc" fill="#ff88cc" fillOpacity={0.3} strokeWidth={1} dot={false} />
-                  <Line yAxisId="price" type="monotone" dataKey="price" stroke={C.blue} strokeWidth={1.5} dot={false} connectNulls />
+                  <Bar yAxisId="vol" dataKey="yesVol" fill={C.neon} fillOpacity={0.6} radius={[2, 2, 0, 0]} />
+                  <Bar yAxisId="vol" dataKey="noVol" fill="#ff88cc" fillOpacity={0.6} radius={[2, 2, 0, 0]} />
+                  <Line yAxisId="price" type="monotone" dataKey="price" stroke={C.blue} strokeWidth={2} dot={false} connectNulls />
                 </ComposedChart>
               </ResponsiveContainer>
 
