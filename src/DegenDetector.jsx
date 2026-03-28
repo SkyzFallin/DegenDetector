@@ -187,7 +187,8 @@ function StatCard({ label, value, sub, color = C.text, icon }) {
 
 function MarketRow({ market, isSelected, onClick, onPin, onFav, isFav }) {
   const warming = market._warmup;
-  const z = warming ? 0 : robustZ(market.bins.at(-1), market.bins);
+  const rawZ = warming ? 0 : robustZ(market.bins.at(-1), market.bins);
+  const z = Math.max(-99, Math.min(99, rawZ)); // clamp display to ±99
   const hot = !warming && z > 4;
   const sus = warming ? 0 : computeSuspicion(market);
   return (
