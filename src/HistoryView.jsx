@@ -347,7 +347,10 @@ export default function HistoryView() {
               {/* Legend */}
               <div style={{ display: "flex", gap: 14, marginBottom: 6, paddingLeft: 4, flexWrap: "wrap" }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textMuted }}>
-                  <span style={{ width: 14, height: 3, background: C.neon, borderRadius: 2 }} /> Volume (contracts/min)
+                  <span style={{ width: 14, height: 3, background: C.neon, borderRadius: 2 }} /> YES buys
+                </span>
+                <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textMuted }}>
+                  <span style={{ width: 14, height: 3, background: C.danger, borderRadius: 2 }} /> NO buys
                 </span>
                 <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textMuted }}>
                   <span style={{ width: 14, height: 3, background: C.blue, borderRadius: 2 }} /> Price (YES ¢)
@@ -368,12 +371,7 @@ export default function HistoryView() {
               {/* Main chart: Volume + Price only */}
               <ResponsiveContainer width="100%" height={220}>
                 <ComposedChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 4 }}>
-                  <defs>
-                    <linearGradient id="histVol" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={C.neon} stopOpacity={0.3} />
-                      <stop offset="100%" stopColor={C.neon} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
+                  {/* No gradient defs needed — using solid fills with opacity */}
                   <XAxis dataKey="time" tick={{ fontSize: 7, fill: C.textDim }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                   <YAxis yAxisId="vol" tick={{ fontSize: 8, fill: C.textDim }} axisLine={false} tickLine={false} width={35} label={{ value: "Volume", angle: -90, position: "insideLeft", fill: C.textDim, fontSize: 8 }} />
                   <YAxis yAxisId="price" orientation="right" tick={{ fontSize: 8, fill: C.textDim }} axisLine={false} tickLine={false} width={35} domain={[0, 1]} label={{ value: "Price", angle: 90, position: "insideRight", fill: C.textDim, fontSize: 8 }} />
@@ -381,7 +379,8 @@ export default function HistoryView() {
                     contentStyle={{ background: C.bgElevated, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 10, color: C.text }}
                     labelFormatter={(label) => `${label} UTC`}
                     formatter={(val, name) => {
-                      if (name === "volume") return [val, "Contracts"];
+                      if (name === "yesVol") return [val, "YES buys"];
+                      if (name === "noVol") return [val, "NO buys"];
                       if (name === "price") return [typeof val === "number" ? `${(val * 100).toFixed(1)}¢` : "—", "Price"];
                       return [val, name];
                     }}
@@ -407,7 +406,8 @@ export default function HistoryView() {
                       label={{ value: `${ev.gapMins}min before news`, fill: C.danger, fontSize: 10, fontWeight: 800, position: "insideTop" }} />;
                   })}
 
-                  <Area yAxisId="vol" type="monotone" dataKey="volume" stroke={C.neon} fill="url(#histVol)" strokeWidth={1.5} dot={false} />
+                  <Area yAxisId="vol" type="monotone" dataKey="yesVol" stackId="vol" stroke={C.neon} fill={C.neon} fillOpacity={0.3} strokeWidth={1} dot={false} />
+                  <Area yAxisId="vol" type="monotone" dataKey="noVol" stackId="vol" stroke={C.danger} fill={C.danger} fillOpacity={0.3} strokeWidth={1} dot={false} />
                   <Line yAxisId="price" type="monotone" dataKey="price" stroke={C.blue} strokeWidth={1.5} dot={false} connectNulls />
                 </ComposedChart>
               </ResponsiveContainer>

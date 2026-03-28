@@ -226,6 +226,8 @@ export function binKalshiTrades(trades, startTs, endTs) {
     bins.push({
       ts: startTs + i * intervalMs,
       volume: 0,
+      yesVolume: 0,
+      noVolume: 0,
       priceSum: 0,
       tradeCount: 0,
     });
@@ -235,6 +237,8 @@ export function binKalshiTrades(trades, startTs, endTs) {
     const idx = Math.floor((t.ts - startTs) / intervalMs);
     if (idx >= 0 && idx < binCount) {
       bins[idx].volume += t.volume;
+      if (t.side === "yes") bins[idx].yesVolume += t.volume;
+      else bins[idx].noVolume += t.volume;
       bins[idx].priceSum += t.price * t.volume;
       bins[idx].tradeCount += 1;
     }
@@ -243,6 +247,8 @@ export function binKalshiTrades(trades, startTs, endTs) {
   return bins.map((b) => ({
     ts: b.ts,
     volume: Math.round(b.volume),
+    yesVol: Math.round(b.yesVolume),
+    noVol: Math.round(b.noVolume),
     price: b.tradeCount > 0 ? b.priceSum / b.volume : null,
     time: fmtBinTime(b.ts),
   }));
