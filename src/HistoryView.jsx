@@ -266,9 +266,9 @@ export default function HistoryView() {
                     setResults([]);
                     // Auto-add close/settlement markers for settled Kalshi markets
                     const autoAnnotations = [];
-                    if (m.closeTime) autoAnnotations.push({ id: uid(), text: `Market closed${m.result ? ` — result: ${m.result.toUpperCase()}` : ""}`, ts: new Date(m.closeTime).getTime(), auto: true });
-                    if (m.settlementTs) autoAnnotations.push({ id: uid(), text: "Official settlement", ts: new Date(m.settlementTs).getTime(), auto: true });
-                    if (autoAnnotations.length) setAnnotations((prev) => [...prev.filter((a) => !a.auto), ...autoAnnotations]);
+                    if (m.closeTime) autoAnnotations.push({ id: uid(), text: `Result confirmed${m.result ? ` — ${m.result.toUpperCase()} wins` : ""} · Betting stopped`, ts: new Date(m.closeTime).getTime(), auto: true });
+                    // Clear all annotations (including preset news) and only show the real close marker
+                    setAnnotations(autoAnnotations);
                     // Auto-zoom date range and auto-fetch
                     let dr = dateRange;
                     if (m.closeTime) {
@@ -366,7 +366,7 @@ export default function HistoryView() {
                   <span style={{ width: 14, height: 3, background: C.warning, borderRadius: 2, borderStyle: "dashed", borderWidth: 1, borderColor: C.warning }} /> 📰 News annotation
                 </span>
                 <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textMuted }}>
-                  <span style={{ width: 14, height: 3, background: "#ff5500", borderRadius: 2 }} /> 🔒 Market close / settlement
+                  <span style={{ width: 14, height: 3, background: "#ff5500", borderRadius: 2 }} /> 🔒 Result confirmed / betting stopped
                 </span>
                 {evidence.length > 0 && (
                   <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textMuted }}>
