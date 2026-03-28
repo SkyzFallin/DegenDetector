@@ -35,11 +35,8 @@ let _kalshiSettledCacheTs = 0;
 export async function searchMarkets(keyword) {
   if (!keyword || keyword.length < 2) return [];
   const kw = keyword.toLowerCase();
-  const [kalshi, poly] = await Promise.all([
-    searchKalshi(kw),
-    searchPoly(kw),
-  ]);
-  return [...poly, ...kalshi];
+  // Kalshi only — Polymarket has very limited history for resolved markets
+  return searchKalshi(kw);
 }
 
 async function fetchKalshiEvents(status, cache, cacheTs) {
@@ -243,14 +240,20 @@ export function binKalshiTrades(trades, startTs, endTs) {
     }
   }
 
-  return bins.map((b) => ({
-    ts: b.ts,
-    volume: Math.round(b.volume),
-    yesVol: Math.round(b.yesVolume),
-    noVol: Math.round(b.noVolume),
-    price: b.tradeCount > 0 ? b.priceSum / b.volume : null,
-    time: fmtBinTime(b.ts),
-  }));
+  // Forward-fill prices so empty bins carry the last traded price
+  // instead of null (which causes connectNulls to draw misleading diagonals)
+  let lastPrice = null;
+  return bins.map((b) => {
+    if (b.tradeCount > 0) lastPrice = b.priceSum / b.volume;
+    return {
+      ts: b.ts,
+      volume: Math.round(b.volume),
+      yesVol: Math.round(b.yesVolume),
+      noVol: Math.round(b.noVolume),
+      price: lastPrice,
+      time: fmtBinTime(b.ts),
+    };
+  });
 }
 
 /**

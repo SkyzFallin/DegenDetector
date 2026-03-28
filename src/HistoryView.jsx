@@ -72,84 +72,81 @@ const PRESETS = [
     newsTime: "2026-03-05T15:00",
   },
   {
-    label: "US Forces Enter Iran",
-    description: "Polymarket Iran markets — check for volume activity before military action announcements",
-    search: "iran",
-    venue: "Polymarket",
-    dateStart: "2026-03-25T00:00",
-    dateEnd: "2026-03-28T00:00",
-    newsHeadline: "US forces enter Iran",
-    newsTime: "2026-03-26T12:00",
-  },
-  {
-    label: "Maduro Captured — $400K Insider Bet 🚨",
-    description: "Fresh account bet $20K at 8¢ five hours before Operation Absolute Resolve. Won $400K+.",
+    label: "Maduro Out — Operation Absolute Resolve 🚨",
+    description: "6M contracts traded. Massive YES surge hours before US operation confirmed Maduro's capture.",
     search: "maduro",
-    venue: "Polymarket",
-    dateStart: "2026-01-01T00:00",
-    dateEnd: "2026-01-03T12:00",
-    newsHeadline: "US Operation Absolute Resolve captures Maduro",
-    newsTime: "2026-01-03T04:00",
+    ticker: "KXMADUROOUT-NMAD-26FEB01",
+    venue: "Kalshi",
+    dateStart: "2026-01-02T12:00",
+    dateEnd: "2026-01-04T06:00",
+    newsHeadline: "US Operation Absolute Resolve — Maduro captured",
+    newsTime: "2026-01-04T01:14",
   },
   {
-    label: "Nobel Peace Prize — Machado 🚨",
-    description: "Odds went 3% → 73% at 1 AM before announcement. Three accounts made ~$90K. Norway investigating.",
-    search: "nobel peace",
-    venue: "Polymarket",
-    dateStart: "2025-10-09T18:00",
-    dateEnd: "2025-10-10T12:00",
-    newsHeadline: "Nobel Peace Prize awarded to Maria Corina Machado",
-    newsTime: "2025-10-10T09:00",
+    label: "Supreme Court vs Trump Tariffs",
+    description: "5.5M contracts. SCOTUS ruled against tariffs — check for leaks before the decision dropped.",
+    search: "tariffs",
+    ticker: "KXDJTVOSTARIFFS",
+    venue: "Kalshi",
+    dateStart: "2026-02-20T08:00",
+    dateEnd: "2026-02-20T18:00",
+    newsHeadline: "Supreme Court rules against Trump's tariffs",
+    newsTime: "2026-02-20T15:23",
   },
   {
-    label: "Swift & Kelce Engaged",
-    description: "\"romanticpaul\" bought 1,200+ shares 15 min before Instagram announcement. Another trader won $52K.",
-    search: "swift kelce",
-    venue: "Polymarket",
-    dateStart: "2025-08-25T00:00",
-    dateEnd: "2025-08-26T20:00",
-    newsHeadline: "Taylor Swift & Travis Kelce announce engagement on Instagram",
-    newsTime: "2025-08-26T16:00",
+    label: "SEC Chair — Paul Atkins 🚨",
+    description: "326K contracts. Trump's SEC pick leaked before official announcement — did crypto insiders know first?",
+    search: "sec chair",
+    ticker: "KXSECCHAIR-26DEC31-PA",
+    venue: "Kalshi",
+    dateStart: "2025-04-09T12:00",
+    dateEnd: "2025-04-10T06:00",
+    newsHeadline: "Paul Atkins confirmed as SEC Chair",
+    newsTime: "2025-04-10T01:25",
   },
   {
-    label: "Iran Strikes — Feb 2026 🚨",
-    description: "Six fresh accounts netted ~$1M. Funded Feb 22, bets placed Feb 27 hours before US-Israel strikes.",
-    search: "iran strikes",
-    venue: "Polymarket",
-    dateStart: "2026-02-26T00:00",
-    dateEnd: "2026-03-01T00:00",
-    newsHeadline: "US-Israel strikes on Iran begin, Khamenei killed",
-    newsTime: "2026-02-28T06:00",
+    label: "Lane Kiffin Leaves Ole Miss",
+    description: "207K contracts. Coaching hires leak through agents and boosters hours before announcements.",
+    search: "kiffin",
+    ticker: "KXCOACHOUTOLEMISS-1-25DEC01",
+    venue: "Kalshi",
+    dateStart: "2025-11-29T00:00",
+    dateEnd: "2025-11-30T22:00",
+    newsHeadline: "Lane Kiffin leaves Ole Miss",
+    newsTime: "2025-11-30T20:18",
   },
   {
-    label: "Google Year in Search — AlphaRaccoon",
-    description: "$3M deposited, 22-for-23 success rate. Made $1.15M in 24 hours predicting exact Google results.",
-    search: "google search",
-    venue: "Polymarket",
-    dateStart: "2025-12-06T00:00",
-    dateEnd: "2025-12-10T00:00",
-    newsHeadline: "Google Year in Search 2025 results announced",
-    newsTime: "2025-12-09T00:00",
+    label: "First Cabinet Exit — Noem 🚨",
+    description: "800K contracts. Kristi Noem left first — did someone know before the resignation went public?",
+    search: "cabinet next",
+    ticker: "KXCABOUT-29JAN-KNOE",
+    venue: "Kalshi",
+    dateStart: "2026-03-07T08:00",
+    dateEnd: "2026-03-07T22:00",
+    newsHeadline: "Kristi Noem resigns from Trump Cabinet",
+    newsTime: "2026-03-07T18:26",
   },
   {
-    label: "Israel-Iran — IDF Reservist Indicted 🚨",
-    description: "IDF reservist used classified intel to bet on exact strike dates. $150K profit. Criminal charges filed.",
-    search: "israel iran",
-    venue: "Polymarket",
-    dateStart: "2025-06-12T00:00",
-    dateEnd: "2025-06-14T00:00",
-    newsHeadline: "Israel Operation Rising Lion begins",
-    newsTime: "2025-06-13T06:00",
+    label: "Trump Reduces National Debt",
+    description: "2M contracts. Market resolved YES — unusual conviction given skepticism. Check for early movers.",
+    search: "national debt",
+    ticker: "KXDEBTSHRINK-28NOV11-1",
+    venue: "Kalshi",
+    dateStart: "2025-06-03T00:00",
+    dateEnd: "2025-06-04T22:00",
+    newsHeadline: "Treasury data confirms national debt reduction",
+    newsTime: "2025-06-04T18:57",
   },
   {
-    label: "OpenAI Employee Fired",
-    description: "OpenAI confirmed firing employee for insider trading on prediction markets. 77 suspicious positions found.",
-    search: "openai",
-    venue: "Polymarket",
-    dateStart: "2025-12-08T00:00",
-    dateEnd: "2025-12-12T00:00",
-    newsHeadline: "GPT-5.2 launched — four accounts entered positions a week prior",
-    newsTime: "2025-12-11T18:00",
+    label: "Top AI Model — Anthropic",
+    description: "700K contracts. Anthropic confirmed as top-ranked AI model. Did insiders front-run the benchmark?",
+    search: "anthropic",
+    ticker: "KXTOPAI-27-JAN01-ANTH",
+    venue: "Kalshi",
+    dateStart: "2026-02-07T00:00",
+    dateEnd: "2026-02-07T20:00",
+    newsHeadline: "Anthropic achieves top-ranked AI model status",
+    newsTime: "2026-02-07T16:01",
   },
 ];
 
@@ -274,8 +271,9 @@ export default function HistoryView() {
     setError(null);
     try {
       const res = await searchMarkets(preset.search);
-      // Auto-select first result matching the venue (or just first result)
-      const match = (preset.venue ? res.find((m) => m.venue === preset.venue) : null) || res[0];
+      // If preset specifies a ticker, match it exactly; otherwise match by venue or pick first
+      const match = (preset.ticker ? res.find((m) => m.ticker === preset.ticker) : null)
+        || (preset.venue ? res.find((m) => m.venue === preset.venue) : null) || res[0];
       if (match) {
         setSelected(match);
         setSearching(false);
@@ -600,7 +598,7 @@ export default function HistoryView() {
 
                   <Bar yAxisId="vol" dataKey="yesVol" fill={C.neon} fillOpacity={0.6} radius={[2, 2, 0, 0]} />
                   <Bar yAxisId="vol" dataKey="noVol" fill="#ff88cc" fillOpacity={0.6} radius={[2, 2, 0, 0]} />
-                  <Line yAxisId="price" type="monotone" dataKey="price" stroke={C.blue} strokeWidth={2} dot={false} connectNulls />
+                  <Line yAxisId="price" type="stepAfter" dataKey="price" stroke={C.blue} strokeWidth={2} dot={false} connectNulls />
                 </ComposedChart>
               </ResponsiveContainer>
 
@@ -644,19 +642,28 @@ export default function HistoryView() {
                 ];
 
                 const analyses = windows.map((w) => {
-                  const bins = scoredData.filter((b) => b.ts >= closeTs - w.ms && b.ts <= closeTs);
-                  const winVol = bins.reduce((s, b) => s + (winSide === "yes" ? (b.yesVol || 0) : (b.noVol || 0)), 0);
-                  const loseVol = bins.reduce((s, b) => s + (winSide === "yes" ? (b.noVol || 0) : (b.yesVol || 0)), 0);
+                  const windowBins = scoredData.filter((b) => b.ts >= closeTs - w.ms && b.ts <= closeTs);
+                  let winVol = 0, loseVol = 0, totalWagered = 0, totalProfit = 0;
+                  for (const b of windowBins) {
+                    const wv = winSide === "yes" ? (b.yesVol || 0) : (b.noVol || 0);
+                    const lv = winSide === "yes" ? (b.noVol || 0) : (b.yesVol || 0);
+                    winVol += wv;
+                    loseVol += lv;
+                    if (wv > 0 && b.price != null) {
+                      // Per-bin: use actual price at time of purchase
+                      // YES winner: paid price ¢, wins $1 → profit = (1 - price) per contract
+                      // NO winner: paid (1 - price) ¢, wins $1 → profit = price per contract
+                      const cost = winSide === "yes" ? b.price : (1 - b.price);
+                      const profit = winSide === "yes" ? (1 - b.price) : b.price;
+                      totalWagered += wv * cost;
+                      totalProfit += wv * profit;
+                    }
+                  }
                   const total = winVol + loseVol;
-                  const prices = bins.filter((b) => b.price != null).map((b) => b.price);
-                  const avgPrice = prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : 0.5;
-                  // For YES winners: profit = contracts × (1 - avg_price_paid)
-                  // For NO winners: profit = contracts × avg_yes_price (since they bought NO cheap)
-                  const costPerContract = winSide === "yes" ? avgPrice : (1 - avgPrice);
-                  const profitPerContract = winSide === "yes" ? (1 - avgPrice) : avgPrice;
-                  const amountWagered = Math.round(winVol * costPerContract);
-                  const estProfit = Math.round(winVol * profitPerContract);
-                  return { ...w, winVol, loseVol, total, avgPrice, costPerContract, profitPerContract, amountWagered, estProfit, pct: total > 0 ? Math.round((winVol / total) * 100) : 0 };
+                  const amountWagered = Math.round(totalWagered);
+                  const estProfit = Math.round(totalProfit);
+                  const profitPerContract = winVol > 0 ? totalProfit / winVol : 0;
+                  return { ...w, winVol, loseVol, total, profitPerContract, amountWagered, estProfit, pct: total > 0 ? Math.round((winVol / total) * 100) : 0 };
                 });
 
                 const best = analyses.find((a) => a.winVol > 0 && a.pct > 55) || analyses[2]; // default to 1h
