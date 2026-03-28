@@ -75,9 +75,10 @@ async function searchKalshi(kw) {
       const markets = ev.markets || [];
       for (const m of markets) {
         const title = m.title || evTitle || "";
-        if (evMatch || title.toLowerCase().includes(kw) || (m.ticker || "").toLowerCase().includes(kw)) {
+        const sub = m.yes_sub_title || m.no_sub_title || "";
+        const searchable = `${title} ${sub} ${m.ticker || ""}`.toLowerCase();
+        if (evMatch || searchable.includes(kw)) {
           // Build a descriptive name: "Event Title — Candidate/Subtitle"
-          const sub = m.yes_sub_title || m.no_sub_title || "";
           const displayName = sub && sub !== title
             ? `${evTitle || title} — ${sub.slice(0, 40)}`
             : (title.length < 100 ? title : evTitle || title.slice(0, 80));

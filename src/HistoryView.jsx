@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea, ComposedChart, Bar, Line, Cell } from "recharts";
 import { searchMarkets, fetchKalshiTrades, fetchPolyPriceHistory, binKalshiTrades, binPolyPrices, computeRetroactiveScores, findSpikeOnset } from "./api/history.js";
 import { susColor, susLabel } from "./scoring.js";
@@ -44,7 +44,7 @@ const PRESETS = [
   {
     label: "Iran Leader — Mojtaba Khamenei 🚨",
     description: "+13¢ price move with 217K contracts in the final 2 hours. Insiders knew the succession outcome.",
-    search: "Mojtaba Khamenei",
+    search: "khamenei",
     venue: "Kalshi",
     dateStart: "2026-03-08T18:00",
     dateEnd: "2026-03-08T23:00",
@@ -54,7 +54,7 @@ const PRESETS = [
   {
     label: "Next Pope — Robert Prevost 🚨",
     description: "THE smoking gun: price went 2¢ → 99¢ with 111K contracts in 2 hours. Someone knew the conclave result.",
-    search: "Robert Prevost",
+    search: "prevost",
     venue: "Kalshi",
     dateStart: "2025-05-08T14:00",
     dateEnd: "2025-05-08T18:00",
@@ -117,15 +117,19 @@ export default function HistoryView() {
   }, [query]);
 
   // ─── Fetch Historical Data ────────────────────────────────
-  const fetchData = useCallback(async () => {
-    if (!selected) return;
+  // Can be called with explicit params (for auto-fetch on select)
+  // or defaults to current state (for manual Fetch button)
+  const fetchData = useCallback(async (overrideMarket, overrideDateRange) => {
+    const market = overrideMarket || selected;
+    const dr = overrideDateRange || dateRange;
+    if (!market) return;
     setLoading(true);
     setError(null);
     setScoredData(null);
     setSpikes([]);
 
-    const startMs = new Date(dateRange.start).getTime();
-    const endMs = new Date(dateRange.end).getTime();
+    const startMs = new Date(dr.start).getTime();
+    const endMs = new Date(dr.end).getTime();
 
     if (endMs <= startMs) {
       setError("End date must be after start date.");
@@ -135,16 +139,16 @@ export default function HistoryView() {
 
     try {
       let bins;
-      if (selected.venue === "Kalshi") {
-        const trades = await fetchKalshiTrades(selected.ticker, startMs, endMs);
+      if (market.venue === "Kalshi") {
+        const trades = await fetchKalshiTrades(market.ticker, startMs, endMs);
         if (trades.length === 0) {
-          setError("No trades found in this date range.");
+          setError("No trades found in this date range. Try adjusting the date range.");
           setLoading(false);
           return;
         }
         bins = binKalshiTrades(trades, startMs, endMs);
       } else {
-        const prices = await fetchPolyPriceHistory(selected.tokenId, startMs, endMs);
+        const prices = await fetchPolyPriceHistory(market.tokenId, startMs, endMs);
         if (prices.length === 0) {
           setError("No price data found. Polymarket may have limited history for resolved markets.");
           setLoading(false);
@@ -153,7 +157,7 @@ export default function HistoryView() {
         bins = binPolyPrices(prices, startMs, endMs);
       }
 
-      const scored = computeRetroactiveScores(bins, { category: selected.category });
+      const scored = computeRetroactiveScores(bins, { category: market.category });
       const detected = findSpikeOnset(scored, 60);
       setScoredData(scored);
       setSpikes(detected);
@@ -265,13 +269,15 @@ export default function HistoryView() {
                     if (m.closeTime) autoAnnotations.push({ id: uid(), text: `Market closed${m.result ? ` — result: ${m.result.toUpperCase()}` : ""}`, ts: new Date(m.closeTime).getTime(), auto: true });
                     if (m.settlementTs) autoAnnotations.push({ id: uid(), text: "Official settlement", ts: new Date(m.settlementTs).getTime(), auto: true });
                     if (autoAnnotations.length) setAnnotations((prev) => [...prev.filter((a) => !a.auto), ...autoAnnotations]);
-                    // Auto-zoom date range: 12 hours before close → 1 hour after
+                    // Auto-zoom date range and auto-fetch
+                    let dr = dateRange;
                     if (m.closeTime) {
                       const closeMs = new Date(m.closeTime).getTime();
-                      const start = new Date(closeMs - 12 * 3600000).toISOString().slice(0, 16);
-                      const end = new Date(closeMs + 1 * 3600000).toISOString().slice(0, 16);
-                      setDateRange({ start, end });
+                      dr = { start: new Date(closeMs - 12 * 3600000).toISOString().slice(0, 16), end: new Date(closeMs + 1 * 3600000).toISOString().slice(0, 16) };
+                      setDateRange(dr);
                     }
+                    // Auto-fetch immediately with the market and date range
+                    fetchData(m, dr);
                   }}
                   style={{ padding: "8px 12px", cursor: "pointer", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 8 }}
                   onMouseEnter={(e) => e.currentTarget.style.background = C.bgCardHover}
