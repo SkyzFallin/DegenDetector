@@ -282,10 +282,12 @@ export default function HistoryView() {
                     // Clear all annotations (including preset news) and only show the real close marker
                     setAnnotations(autoAnnotations);
                     // Auto-zoom: 4 hours before close → 15 min after (no wasted space)
+                    // datetime-local inputs use LOCAL time, so we need local strings
                     let dr = dateRange;
                     if (m.closeTime) {
                       const closeMs = new Date(m.closeTime).getTime();
-                      dr = { start: new Date(closeMs - 4 * 3600000).toISOString().slice(0, 16), end: new Date(closeMs + 15 * 60000).toISOString().slice(0, 16) };
+                      const toLocal = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}T${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; };
+                      dr = { start: toLocal(closeMs - 4 * 3600000), end: toLocal(closeMs + 15 * 60000) };
                       setDateRange(dr);
                     }
                     // Auto-fetch immediately with the market and date range
