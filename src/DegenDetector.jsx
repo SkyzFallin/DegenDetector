@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import * as recharts from "recharts";
+import { fetchAllMarkets, refreshMarkets, pruneStale } from "./api/index.js";
 
 const { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell } = recharts;
 
@@ -36,40 +37,7 @@ const C = {
 const VENUES = ["Polymarket", "Kalshi"];
 const CATEGORIES = ["Regulatory", "Political", "Financial", "Legal", "Geopolitical", "Corporate"];
 
-const MARKETS = [
-  { name: "SEC approves Solana ETF", cat: "Regulatory", leakProb: 0.9 },
-  { name: "EU AI Act enforcement begins Q3", cat: "Regulatory", leakProb: 0.7 },
-  { name: "US bans TikTok by 2027", cat: "Regulatory", leakProb: 0.85 },
-  { name: "CFTC classifies ETH as commodity", cat: "Regulatory", leakProb: 0.8 },
-  { name: "FDA fast-tracks Neuralink approval", cat: "Regulatory", leakProb: 0.75 },
-  { name: "Trump wins 2028 GOP Nomination", cat: "Political", leakProb: 0.5 },
-  { name: "Democrats win House 2026", cat: "Political", leakProb: 0.4 },
-  { name: "Newsom announces presidential bid", cat: "Political", leakProb: 0.8 },
-  { name: "Student loan forgiveness executive order", cat: "Political", leakProb: 0.85 },
-  { name: "US cannabis federal legalization 2026", cat: "Political", leakProb: 0.7 },
-  { name: "Fed cuts rates June FOMC", cat: "Financial", leakProb: 0.6 },
-  { name: "OpenAI IPO before 2027", cat: "Financial", leakProb: 0.9 },
-  { name: "Nvidia announces 10:1 stock split", cat: "Financial", leakProb: 0.85 },
-  { name: "Amazon acquires TikTok US ops", cat: "Financial", leakProb: 0.95 },
-  { name: "Tesla takes SpaceX private", cat: "Financial", leakProb: 0.9 },
-  { name: "Gold hits $4000/oz by Q4", cat: "Financial", leakProb: 0.3 },
-  { name: "Bitcoin above $200k by Dec", cat: "Financial", leakProb: 0.25 },
-  { name: "Trump convicted before election", cat: "Legal", leakProb: 0.7 },
-  { name: "Google broken up by DOJ", cat: "Legal", leakProb: 0.85 },
-  { name: "SBF sentence reduced on appeal", cat: "Legal", leakProb: 0.75 },
-  { name: "Tether investigated by DOJ", cat: "Legal", leakProb: 0.8 },
-  { name: "Apple loses App Store antitrust", cat: "Legal", leakProb: 0.7 },
-  { name: "Ukraine ceasefire agreement signed", cat: "Geopolitical", leakProb: 0.8 },
-  { name: "China invades Taiwan by 2027", cat: "Geopolitical", leakProb: 0.6 },
-  { name: "US rejoins Paris Climate Agreement", cat: "Geopolitical", leakProb: 0.7 },
-  { name: "Iran nuclear deal reinstated", cat: "Geopolitical", leakProb: 0.75 },
-  { name: "North Korea diplomatic opening", cat: "Geopolitical", leakProb: 0.65 },
-  { name: "Elon Musk steps down as Tesla CEO", cat: "Corporate", leakProb: 0.9 },
-  { name: "Apple releases AR glasses", cat: "Corporate", leakProb: 0.7 },
-  { name: "Twitter/X goes public again", cat: "Corporate", leakProb: 0.85 },
-  { name: "Disney acquires EA", cat: "Corporate", leakProb: 0.9 },
-  { name: "Meta shuts down Threads", cat: "Corporate", leakProb: 0.6 },
-];
+// Markets are now fetched live from Polymarket + Kalshi APIs
 
 // ─── Utilities ──────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).substr(2, 9);
@@ -77,15 +45,7 @@ const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const rand = (lo, hi) => lo + Math.random() * (hi - lo);
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-function genBins(n = 90) {
-  const bins = [];
-  let base = rand(3, 30);
-  for (let i = 0; i < n; i++) {
-    bins.push(Math.max(0, Math.round(base + rand(-5, 5))));
-    base = clamp(base + rand(-1.5, 1.5), 2, 50);
-  }
-  return bins;
-}
+// genBins removed — bins now come from live volume accumulator
 
 function median(a) {
   const s = [...a].sort((x, y) => x - y);
@@ -174,21 +134,7 @@ function analyzeSpike(market) {
   return flags;
 }
 
-// ─── Market Creation ────────────────────────────────────────────
-function createMarket(i) {
-  const t = MARKETS[i % MARKETS.length];
-  return {
-    id: uid(), venue: pick(VENUES), name: t.name, category: t.cat,
-    leakProb: t.leakProb, price: rand(0.08, 0.92),
-    priceChange: rand(-0.12, 0.12), oi: Math.round(rand(800, 80000)),
-    oiChange: Math.round(rand(-500, 500)), bins: genBins(90),
-    baseVolume: rand(3, 35), totalVolume24h: Math.round(rand(5000, 400000)),
-    dollarVolume24h: Math.round(rand(3000, 1500000)),
-    lastTradeTs: Date.now() - Math.round(rand(0, 300000)),
-    expiryHours: rand(2, 720), pinned: false,
-    hasRecentNews: Math.random() > 0.6,
-  };
-}
+// createMarket removed — markets now come from live API data
 
 function createAlert(market, z, vol, type = "volume_spike") {
   return {
@@ -520,61 +466,58 @@ function DetailPanel({ market }) {
 
 // ─── MAIN APP ───────────────────────────────────────────────────
 export default function DegenDetector() {
-  const [markets, setMarkets] = useState(() => Array.from({ length: MARKETS.length }, (_, i) => createMarket(i)));
+  const [markets, setMarkets] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
-  const [filter, setFilter] = useState({ venue: "all", category: "all", search: "", minSus: 0 });
+  const [filter, setFilter] = useState({ venue: "all", categories: new Set(), search: "", minSus: 0 });
   const [view, setView] = useState("dashboard");
   const [sortBy, setSortBy] = useState("suspicion");
-  const [conn, setConn] = useState({ polymarket: "live", kalshi: "live" });
+  const [conn, setConn] = useState({ polymarket: "loading", kalshi: "loading" });
   const [soundOn, setSoundOn] = useState(true);
+  const [loading, setLoading] = useState(true);
   const tickRef = useRef(0);
   const frozenRef = useRef(false);
 
+  // ─── Initial fetch ──────────────────────────────────────────
   useEffect(() => {
-    const iv = setInterval(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchAllMarkets();
+        if (!cancelled) {
+          setMarkets(data);
+          setConn({ polymarket: "live", kalshi: "live" });
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("[DegenDetector] initial fetch failed:", err);
+        setConn({ polymarket: "error", kalshi: "error" });
+        setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // ─── Polling loop: refresh every 10s ────────────────────────
+  useEffect(() => {
+    if (loading) return;
+    const iv = setInterval(async () => {
       if (frozenRef.current) return;
       tickRef.current += 1;
-      setMarkets((prev) => {
-        // GLOBAL spike budget: at most ONE market spikes, ~7% chance per tick (every ~30s)
-        const spikeIdx = Math.random() > 0.93 ? Math.floor(Math.random() * prev.length) : -1;
+      try {
+        const updated = await refreshMarkets(markets);
+        setMarkets(updated);
 
-        const updated = prev.map((m, idx) => {
-          let newBin = Math.max(0, Math.round(m.baseVolume + rand(-4, 4)));
-          let pj = rand(-0.002, 0.002);
-
-          if (idx === spikeIdx) {
-            // TRUE spike: 10x to 100x normal. A market doing 8 contracts/min
-            // suddenly does 800. That's what insider buying looks like.
-            newBin = Math.round(m.baseVolume * rand(10, 100));
-            // 90% chance price moves in ONE direction (conviction)
-            pj = (Math.random() > 0.1 ? 1 : -1) * rand(0.03, 0.10);
-          }
-
-          const newBins = [...m.bins.slice(1), newBin];
-          return {
-            ...m, bins: newBins,
-            price: clamp(m.price + pj, 0.01, 0.99),
-            priceChange: m.priceChange + pj,
-            totalVolume24h: m.totalVolume24h + newBin,
-            dollarVolume24h: m.dollarVolume24h + Math.round(newBin * rand(5, 50)),
-            oi: Math.max(0, m.oi + Math.round(rand(-15, 25))),
-            oiChange: m.oiChange + Math.round(rand(-8, 8)),
-            expiryHours: Math.max(0, m.expiryHours - 2 / 3600),
-            lastTradeTs: Date.now(),
-            hasRecentNews: tickRef.current % 60 === 0 ? Math.random() > 0.4 : m.hasRecentNews,
-          };
-        });
-
+        // Check for alerts on updated data
         updated.forEach((m) => {
           const cur = m.bins.at(-1);
           const prevBins = m.bins.slice(0, -1);
-          const prevMax = Math.max(...prevBins);
-          const ratio = prevMax > 0 ? cur / prevMax : 0;
+          const prevMax = Math.max(...prevBins, 1);
+          const ratio = cur / prevMax;
           const z = robustZ(cur, m.bins);
 
-          // ALL gates must pass — this is a rare, high-conviction event:
-          // 1. Current bin ≥ 10x the previous maximum (not average — MAXIMUM)
+          // ALL gates must pass — rare, high-conviction event:
+          // 1. Current bin ≥ 10x the previous maximum
           // 2. Z ≥ 8
           // 3. Suspicion ≥ 60
           // 4. ≥ 2 converging flags
@@ -592,12 +535,15 @@ export default function DegenDetector() {
             }
           }
         });
-        return updated;
-      });
-      if (tickRef.current % 120 === 0) setConn({ polymarket: Math.random() > 0.95 ? "reconnecting" : "live", kalshi: Math.random() > 0.95 ? "reconnecting" : "live" });
-    }, 2000);
+
+        // Update connection status
+        setConn({ polymarket: "live", kalshi: "live" });
+      } catch (err) {
+        console.error("[DegenDetector] refresh failed:", err);
+      }
+    }, 10000); // Poll every 10 seconds
     return () => clearInterval(iv);
-  }, [soundOn]);
+  }, [loading, markets, soundOn]);
 
   const ackAlert = useCallback((id) => setAlerts((p) => p.map((a) => a.id === id ? { ...a, acked: true } : a)), []);
   const togglePin = useCallback((id) => setMarkets((p) => p.map((m) => m.id === id ? { ...m, pinned: !m.pinned } : m)), []);
@@ -605,7 +551,7 @@ export default function DegenDetector() {
   const filtered = useMemo(() => {
     return markets.filter((m) => {
       if (filter.venue !== "all" && m.venue !== filter.venue) return false;
-      if (filter.category !== "all" && m.category !== filter.category) return false;
+      if (filter.categories.size > 0 && !filter.categories.has(m.category)) return false;
       if (filter.search && !m.name.toLowerCase().includes(filter.search.toLowerCase())) return false;
       if (filter.minSus > 0 && computeSuspicion(m) < filter.minSus) return false;
       return true;
@@ -686,7 +632,10 @@ export default function DegenDetector() {
             <div style={{ display: "flex", gap: 5, padding: "7px 10px", borderBottom: `1px solid ${C.border}`, alignItems: "center", flexWrap: "wrap" }}>
               <input type="text" placeholder="Search..." value={filter.search} onChange={(e) => setFilter({ ...filter, search: e.target.value })} style={{ ...ss, width: 120, fontFamily: "inherit" }} />
               <select value={filter.venue} onChange={(e) => setFilter({ ...filter, venue: e.target.value })} style={ss}><option value="all">All Venues</option>{VENUES.map((v) => <option key={v} value={v}>{v}</option>)}</select>
-              <select value={filter.category} onChange={(e) => setFilter({ ...filter, category: e.target.value })} style={ss}><option value="all">All Categories</option>{CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+              {CATEGORIES.map((c) => { const active = filter.categories.has(c); return (
+                <button key={c} onClick={() => { const next = new Set(filter.categories); if (active) next.delete(c); else next.add(c); setFilter({ ...filter, categories: next }); }}
+                  style={{ padding: "3px 7px", fontSize: 9, fontWeight: 700, background: active ? C.neonDim : "transparent", color: active ? C.neon : C.textDim, border: `1px solid ${active ? C.neon + "33" : C.border}`, borderRadius: 4, cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.03em" }}>{c}</button>
+              ); })}
               <select value={filter.minSus} onChange={(e) => setFilter({ ...filter, minSus: Number(e.target.value) })} style={ss}><option value={0}>All Levels</option><option value={20}>Sus ≥ 20</option><option value={40}>Sus ≥ 40</option><option value={60}>Sus ≥ 60</option><option value={80}>Sus ≥ 80</option></select>
               <div style={{ marginLeft: "auto", display: "flex", gap: 3, alignItems: "center" }}>
                 <span style={{ fontSize: 8, color: C.textDim }}>Sort:</span>
@@ -700,7 +649,8 @@ export default function DegenDetector() {
             </div>
             <div style={{ flex: 1, overflowY: "auto" }}>
               {filtered.map((m) => (<MarketRow key={m.id} market={m} isSelected={m.id === selectedId} onClick={() => setSelectedId(m.id)} onPin={togglePin} />))}
-              {filtered.length === 0 && (<div style={{ padding: 40, textAlign: "center", color: C.textDim }}>No markets match filters</div>)}
+              {loading && (<div style={{ padding: 40, textAlign: "center", color: C.neon, animation: "pulse 1.5s infinite" }}>⏳ Loading live markets from Polymarket & Kalshi...</div>)}
+              {!loading && filtered.length === 0 && (<div style={{ padding: 40, textAlign: "center", color: C.textDim }}>No markets match filters</div>)}
             </div>
           </div>
           <div className="dd-hide-mobile" style={{ flex: "1 1 44%", minWidth: 0, overflow: "hidden" }}><DetailPanel market={selected} /></div>

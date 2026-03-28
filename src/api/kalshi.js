@@ -1,0 +1,92 @@
+// ─── Kalshi REST API ─────────────────────────────────────────
+// Docs: https://docs.kalshi.com/
+// Public market data, no auth required.
+// Uses /events endpoint with nested markets for better quality results.
+
+import { classifyCategory, LEAK_PROBS } from "./categories.js";
+
+const BASE = "/api/kalshi";
+
+// Skip sports/entertainment — we want political, financial, geopolitical
+const SKIP_CATEGORIES = new Set(["Sports", "Entertainment"]);
+
+/**
+ * Fetch active markets from Kalshi via the events endpoint.
+ * This gives us properly titled markets instead of sports combo noise.
+ */
+export async function fetchKalshiMarkets(limit = 60) {
+  try {
+    const url = `${BASE}/events?limit=100&status=open&with_nested_markets=true`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Kalshi ${res.status}`);
+    const data = await res.json();
+    const events = data.events || [];
+
+    const results = [];
+    for (const event of events) {
+      if (SKIP_CATEGORIES.has(event.category)) continue;
+      const markets = event.markets || [];
+      for (const m of markets) {
+        const mapped = mapKalshi(m, event);
+        if (mapped) results.push(mapped);
+        if (results.length >= limit) break;
+      }
+      if (results.length >= limit) break;
+    }
+    return results;
+  } catch (err) {
+    console.error("[Kalshi] fetch failed:", err);
+    return [];
+  }
+}
+
+function mapKalshi(m, event) {
+  const price = parseFloat(m.last_price_dollars) || 0;
+  const yesBid = parseFloat(m.yes_bid_dollars) || 0;
+  const yesAsk = parseFloat(m.yes_ask_dollars) || 0;
+  const midPrice = yesBid && yesAsk ? (yesBid + yesAsk) / 2 : price;
+  const volume24h = parseFloat(m.volume_24h_fp) || 0;
+  const totalVolume = parseFloat(m.volume_fp) || 0;
+
+  // Skip combo/multi-leg markets, sports, and zero-activity markets
+  if (m.strike_type === "custom" && m.mve_selected_legs?.length > 2) return null;
+  if (m.title && m.title.length > 150) return null;
+  if (totalVolume === 0 && volume24h === 0) return null;
+  // Filter out sports by ticker pattern
+  const ticker = (m.ticker || "").toUpperCase();
+  if (/^KX(NBA|NFL|MLB|NHL|NCAA|MLS|SPORT|MVE)/.test(ticker)) return null;
+
+  // Use event title if market title is just a ticker value
+  const title = (m.title && m.title.length < 100) ? m.title : (event?.title || m.ticker || "Unknown");
+  const categoryText = `${title} ${event?.category || ""} ${m.event_ticker || ""}`;
+  const category = classifyCategory(categoryText);
+  const expiryMs = m.expected_expiration_time
+    ? new Date(m.expected_expiration_time).getTime() - Date.now()
+    : 720 * 3600000;
+  const prevPrice = parseFloat(m.previous_price_dollars) || midPrice;
+
+  return {
+    id: `kalshi-${m.ticker}`,
+    sourceId: m.ticker,
+    venue: "Kalshi",
+    name: title,
+    category,
+    leakProb: LEAK_PROBS[category] || 0.5,
+    price: midPrice || price || 0.5,
+    priceChange: midPrice - prevPrice,
+    oi: Math.round(parseFloat(m.open_interest_fp) || 0),
+    oiChange: 0,
+    totalVolume24h: Math.round(volume24h),
+    dollarVolume24h: Math.round(volume24h),
+    lastTradeTs: m.updated_time ? new Date(m.updated_time).getTime() : Date.now(),
+    expiryHours: Math.max(0, expiryMs / 3600000),
+    pinned: false,
+    hasRecentNews: Math.abs(midPrice - prevPrice) > 0.05,
+    bestBid: yesBid,
+    bestAsk: yesAsk,
+    spread: yesAsk - yesBid,
+    liquidity: parseFloat(m.liquidity_dollars) || 0,
+    bins: new Array(90).fill(0),
+    baseVolume: Math.max(1, Math.round((volume24h || 100) / 1440)),
+  };
+}
