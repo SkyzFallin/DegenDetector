@@ -519,7 +519,7 @@ export default function HistoryView() {
                   <span style={{ width: 14, height: 3, background: C.neon, borderRadius: 2 }} /> YES buys
                 </span>
                 <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textMuted }}>
-                  <span style={{ width: 14, height: 3, background: "#ff88cc", borderRadius: 2 }} /> NO buys
+                  <span style={{ width: 14, height: 3, background: "#ff3355", borderRadius: 2 }} /> NO buys
                 </span>
                 <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: C.textMuted }}>
                   <span style={{ width: 14, height: 3, background: C.blue, borderRadius: 2 }} /> Price (YES ¢)
@@ -564,7 +564,7 @@ export default function HistoryView() {
                             </div>
                           )}
                           {noVol > 0 && (
-                            <div style={{ color: "#ff88cc" }}>
+                            <div style={{ color: "#ff3355" }}>
                               NO: {noVol.toLocaleString()} contracts @ {noPrice != null ? `${(noPrice * 100).toFixed(1)}¢` : "—"}
                               {noDollars != null && <span style={{ color: C.textMuted }}> = ${noDollars.toLocaleString()}</span>}
                             </div>
@@ -602,7 +602,7 @@ export default function HistoryView() {
                   })}
 
                   <Bar yAxisId="vol" dataKey="yesVol" fill={C.neon} fillOpacity={0.6} radius={[2, 2, 0, 0]} />
-                  <Bar yAxisId="vol" dataKey="noVol" fill="#ff88cc" fillOpacity={0.6} radius={[2, 2, 0, 0]} />
+                  <Bar yAxisId="vol" dataKey="noVol" fill="#ff3355" fillOpacity={0.6} radius={[2, 2, 0, 0]} />
                   <Line yAxisId="price" type="stepAfter" dataKey="price" stroke={C.blue} strokeWidth={2} dot={false} connectNulls />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -635,8 +635,8 @@ export default function HistoryView() {
                 const closeTs = new Date(selected.closeTime).getTime();
                 const winSide = selected.result; // "yes" or "no"
                 const loseSide = winSide === "yes" ? "no" : "yes";
-                const winColor = winSide === "yes" ? C.neon : "#ff88cc";
-                const loseColor = winSide === "yes" ? "#ff88cc" : C.neon;
+                const winColor = winSide === "yes" ? C.neon : "#ff3355";
+                const loseColor = winSide === "yes" ? "#ff3355" : C.neon;
 
                 // Analyze multiple time windows
                 const windows = [
