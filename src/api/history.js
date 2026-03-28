@@ -6,6 +6,19 @@
 import { classifyCategory, LEAK_PROBS } from "./categories.js";
 import { computeSuspicion, robustZ } from "../scoring.js";
 
+/**
+ * Format a timestamp for chart x-axis labels. Includes date + time.
+ * e.g. "Mar 8 14:23"
+ */
+function fmtBinTime(ts) {
+  const d = new Date(ts);
+  const mon = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+  const day = d.getUTCDate();
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${mon} ${day} ${hh}:${mm}`;
+}
+
 const KALSHI_BASE = "/api/kalshi";
 const POLY_BASE = "/api/poly";
 const CLOB_BASE = "/api/clob";
@@ -228,7 +241,7 @@ export function binKalshiTrades(trades, startTs, endTs) {
     ts: b.ts,
     volume: Math.round(b.volume),
     price: b.tradeCount > 0 ? b.priceSum / b.volume : null,
-    time: new Date(b.ts).toISOString().slice(11, 16), // HH:MM for chart labels
+    time: fmtBinTime(b.ts),
   }));
 }
 
@@ -259,7 +272,7 @@ export function binPolyPrices(pricePoints, startTs, endTs) {
       ts: startTs + i * intervalMs,
       volume: Math.round(velocity),
       price,
-      time: new Date(startTs + i * intervalMs).toISOString().slice(11, 16),
+      time: fmtBinTime(startTs + i * intervalMs),
     });
     lastPrice = price;
   }

@@ -15,6 +15,28 @@ const fmtTs = (ts) => new Date(ts).toLocaleString("en-US", { month: "short", day
 const fmtDuration = (mins) => mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2, 11));
 
+// Must match fmtBinTime in api/history.js for chart x-axis matching
+function fmtBinTime(ts) {
+  const d = new Date(ts);
+  const mon = d.toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+  const day = d.getUTCDate();
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${mon} ${day} ${hh}:${mm}`;
+}
+
+// Find the closest chart bin time string for a given timestamp
+function findClosestBinTime(ts, chartData) {
+  if (!chartData.length) return null;
+  let closest = chartData[0];
+  let minDiff = Infinity;
+  for (const d of chartData) {
+    const diff = Math.abs(d.ts - ts);
+    if (diff < minDiff) { minDiff = diff; closest = d; }
+  }
+  return closest.time;
+}
+
 // ─── Preset Case Studies ────────────────────────────────────
 // Real examples of suspected insider trading on prediction markets.
 // These pre-fill the search, date range, and news annotation.
@@ -320,6 +342,7 @@ export default function HistoryView() {
                   <YAxis yAxisId="price" orientation="right" tick={{ fontSize: 8, fill: C.textDim }} axisLine={false} tickLine={false} width={35} domain={[0, 1]} />
                   <Tooltip
                     contentStyle={{ background: C.bgElevated, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 10, color: C.text }}
+                    labelFormatter={(label) => `${label} UTC`}
                     formatter={(val, name) => {
                       if (name === "volume") return [val, "Volume"];
                       if (name === "price") return [typeof val === "number" ? `${(val * 100).toFixed(1)}¢` : "—", "Price"];
@@ -328,17 +351,21 @@ export default function HistoryView() {
                     }}
                   />
 
-                  {/* News annotation markers */}
+                  {/* News annotation markers — bright yellow vertical lines with full date */}
                   {annotations.map((a) => {
-                    const timeStr = new Date(a.ts).toISOString().slice(11, 16);
-                    return <ReferenceLine key={a.id} x={timeStr} yAxisId="vol" stroke={C.warning} strokeDasharray="4 4" label={{ value: `📰 ${a.text.slice(0, 20)}`, fill: C.warning, fontSize: 8, position: "top" }} />;
+                    const binTime = findClosestBinTime(a.ts, chartData);
+                    if (!binTime) return null;
+                    return <ReferenceLine key={a.id} x={binTime} yAxisId="vol" stroke={C.warning} strokeWidth={2} strokeDasharray="6 3"
+                      label={{ value: `📰 ${a.text.slice(0, 25)} — ${fmtTs(a.ts)}`, fill: C.warning, fontSize: 9, fontWeight: 700, position: "top", offset: 8 }} />;
                   })}
 
                   {/* Evidence zones — red shading between spike start and news */}
                   {evidence.map((ev, i) => {
-                    const spikeTime = new Date(ev.spike.startTs).toISOString().slice(11, 16);
-                    const newsTime = new Date(ev.annotation.ts).toISOString().slice(11, 16);
-                    return <ReferenceArea key={i} x1={spikeTime} x2={newsTime} yAxisId="vol" fill={C.danger} fillOpacity={0.08} />;
+                    const spikeTime = findClosestBinTime(ev.spike.startTs, chartData);
+                    const newsTime = findClosestBinTime(ev.annotation.ts, chartData);
+                    if (!spikeTime || !newsTime) return null;
+                    return <ReferenceArea key={i} x1={spikeTime} x2={newsTime} yAxisId="vol" fill={C.danger} fillOpacity={0.12}
+                      label={{ value: `${ev.gapMins}min gap`, fill: C.danger, fontSize: 10, fontWeight: 800, position: "insideTop" }} />;
                   })}
 
                   <Area yAxisId="vol" type="monotone" dataKey="volume" stroke={C.neon} fill="url(#histVol)" strokeWidth={1} dot={false} />
