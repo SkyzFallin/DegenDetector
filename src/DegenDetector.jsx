@@ -615,6 +615,7 @@ export default function DegenDetector() {
   const marketsRef = useRef(markets);
   const soundOnRef = useRef(soundOn);
   const favIdsRef = useRef(new Set());
+  const alertedRef = useRef(new Map()); // marketId → timestamp (dedup outside React state)
   useEffect(() => { marketsRef.current = markets; }, [markets]);
   useEffect(() => { soundOnRef.current = soundOn; }, [soundOn]);
   useEffect(() => { favIdsRef.current = new Set(favorites.map((f) => f.id)); }, [favorites]);
@@ -678,15 +679,21 @@ export default function DegenDetector() {
             const sus = computeSuspicion(m);
             const flags = analyzeSpike(m);
             if (sus >= 60 && flags.length >= 2) {
-              setAlerts((pa) => {
-                if (pa.find((a) => a.marketId === m.id && Date.now() - a.timestamp < 900000)) return pa;
-                const type = ratio >= 50 ? "whale_print" : "volume_spike";
-                const alert = createAlert(m, z, cur, type);
-                if (soundOnRef.current) playAlertSound(alert.severity);
-                const tg = telegramRef.current;
-                if (tg?.botToken && tg?.chatId) sendTelegramMessage(tg.botToken, tg.chatId, formatTelegramMessage(alert));
-                return [alert, ...pa].slice(0, 50);
-              });
+              // Dedup check OUTSIDE React state to avoid StrictMode double-fire.
+              // React StrictMode calls functional updaters twice with the SAME input,
+              // so dedup inside setAlerts() doesn't prevent double side effects.
+              const lastAlerted = alertedRef.current.get(m.id);
+              if (lastAlerted && Date.now() - lastAlerted < 900000) return;
+              alertedRef.current.set(m.id, Date.now());
+
+              const type = ratio >= 50 ? "whale_print" : "volume_spike";
+              const alert = createAlert(m, z, cur, type);
+              setAlerts((pa) => [alert, ...pa].slice(0, 50));
+
+              // Side effects fire exactly once
+              if (soundOnRef.current) playAlertSound(alert.severity);
+              const tg = telegramRef.current;
+              if (tg?.botToken && tg?.chatId) sendTelegramMessage(tg.botToken, tg.chatId, formatTelegramMessage(alert));
             }
           }
         });
