@@ -37,7 +37,7 @@ function saveBinCache() {
     }
     const json = JSON.stringify({ ts: Date.now(), data });
     localStorage.setItem(BIN_CACHE_KEY, json);
-  } catch {}
+  } catch (e) { console.warn("[BinCache] localStorage save failed:", e.message); }
 }
 
 function restoreBinCache() {
@@ -145,6 +145,12 @@ export function isAlertEligible(marketId) {
   return state && state.pollCount >= MIN_POLLS_FOR_ALERTING;
 }
 
+// ─── Venue Status Tracking ──────────────────────────────────
+// Tracks which venues returned data on the last fetch so the UI
+// can distinguish "all good" from "partial failure".
+let _venueStatus = { polymarket: "ok", kalshi: "ok" };
+export function getVenueStatus() { return _venueStatus; }
+
 // ─── Public API ──────────────────────────────────────────────
 
 /**
@@ -156,6 +162,10 @@ export async function fetchAllMarkets() {
     fetchPolymarkets(60),
     fetchKalshiMarkets(60),
   ]);
+  _venueStatus = {
+    polymarket: poly.length > 0 ? "ok" : "error",
+    kalshi: kalshi.length > 0 ? "ok" : "error",
+  };
 
   // Deduplicate by name — keep the highest-volume version of same-named markets
   const byName = new Map();
@@ -235,7 +245,7 @@ export async function refreshMarkets(existingMarkets, favoriteIds = new Set()) {
         const wr = await analyzeMarketWallets(m.conditionId);
         if (wr && wr.uniqueWallets > 0) _walletResults.set(m.conditionId, wr);
       } catch {}
-    })).then(() => pruneWalletCache());
+    })).then(() => pruneWalletCache()).catch((e) => console.error("[Wallets] batch analysis failed:", e));
   }
   // Attach wallet data from cache (available from previous scan cycle)
   for (const m of merged) {

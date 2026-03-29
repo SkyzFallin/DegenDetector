@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell } from "recharts";
-import { fetchAllMarkets, refreshMarkets, pruneStale, isAlertEligible } from "./api/index.js";
+import { fetchAllMarkets, refreshMarkets, pruneStale, isAlertEligible, getVenueStatus } from "./api/index.js";
 
 // ─── Theme ──────────────────────────────────────────────────────
 const C = {
@@ -605,7 +605,7 @@ export default function DegenDetector() {
       const sevenDays = 7 * 86400000;
       const pruned = saved.filter((f) => !f.addedAt || Date.now() - f.addedAt < sevenDays);
       if (pruned.length !== saved.length) {
-        try { localStorage.setItem("dd_favorites", JSON.stringify(pruned)); } catch {}
+        try { localStorage.setItem("dd_favorites", JSON.stringify(pruned)); } catch (e) { console.warn("[Favorites] localStorage save failed:", e.message); }
       }
       return pruned;
     } catch { return []; }
@@ -634,9 +634,11 @@ export default function DegenDetector() {
         const data = await fetchAllMarkets();
         if (!cancelled) {
           setMarkets(data);
-          setConn({ polymarket: "live", kalshi: "live" });
+          const vs = getVenueStatus();
+          setConn({ polymarket: vs.polymarket === "ok" ? "live" : "error", kalshi: vs.kalshi === "ok" ? "live" : "error" });
           setLastUpdated(Date.now());
-          setFetchError(null);
+          const partialFail = vs.polymarket !== "ok" || vs.kalshi !== "ok";
+          setFetchError(partialFail ? `${vs.polymarket !== "ok" ? "Polymarket" : "Kalshi"} data unavailable — showing partial results.` : null);
           setLoading(false);
         }
       } catch (err) {
@@ -698,9 +700,11 @@ export default function DegenDetector() {
           }
         });
 
-        setConn({ polymarket: "live", kalshi: "live" });
+        const vs = getVenueStatus();
+        setConn({ polymarket: vs.polymarket === "ok" ? "live" : "error", kalshi: vs.kalshi === "ok" ? "live" : "error" });
         setLastUpdated(Date.now());
-        setFetchError(null);
+        const partialFail = vs.polymarket !== "ok" || vs.kalshi !== "ok";
+        setFetchError(partialFail ? `${vs.polymarket !== "ok" ? "Polymarket" : "Kalshi"} data unavailable — showing partial results.` : null);
       } catch (err) {
         console.error("[DegenDetector] refresh failed:", err);
         setFetchError("Data refresh failed — showing stale data. Retrying...");
@@ -718,7 +722,7 @@ export default function DegenDetector() {
         id: market.id, name: market.name, venue: market.venue, category: market.category,
         addedAt: Date.now(),
       }];
-      try { localStorage.setItem("dd_favorites", JSON.stringify(next)); } catch {}
+      try { localStorage.setItem("dd_favorites", JSON.stringify(next)); } catch (e) { console.warn("[Favorites] localStorage save failed:", e.message); }
       return next;
     });
   }, []);
@@ -728,8 +732,10 @@ export default function DegenDetector() {
       const updated = await refreshMarkets(marketsRef.current, favIdsRef.current);
       setMarkets(updated);
       setLastUpdated(Date.now());
-      setFetchError(null);
-      setConn({ polymarket: "live", kalshi: "live" });
+      const vs = getVenueStatus();
+      setConn({ polymarket: vs.polymarket === "ok" ? "live" : "error", kalshi: vs.kalshi === "ok" ? "live" : "error" });
+      const partialFail = vs.polymarket !== "ok" || vs.kalshi !== "ok";
+      setFetchError(partialFail ? `${vs.polymarket !== "ok" ? "Polymarket" : "Kalshi"} data unavailable — showing partial results.` : null);
     } catch (err) {
       setFetchError("Manual refresh failed.");
     }
