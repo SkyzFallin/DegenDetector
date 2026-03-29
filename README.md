@@ -32,28 +32,7 @@ npm run dev
 
 Opens at `http://localhost:5173`. The Vite dev proxy handles CORS for both APIs.
 
-## Deploying to Production
-
-> **Important:** The Vite dev proxy (`/api/poly`, `/api/kalshi`) only works during `npm run dev`. A production build is static files — API calls will 404 without a real proxy.
-
-**Options (pick one):**
-
-| Method | Complexity | Notes |
-|---|---|---|
-| **Vercel** | Low | Add `vercel.json` with [rewrites](https://vercel.com/docs/projects/project-configuration#rewrites) to proxy `/api/poly` and `/api/kalshi` |
-| **Cloudflare Workers** | Low | Tiny worker that forwards requests to upstream APIs |
-| **Nginx reverse proxy** | Medium | Standard `proxy_pass` rules for both API paths |
-| **Express middleware** | Medium | `http-proxy-middleware` in a small Node server |
-
-Example `vercel.json`:
-```json
-{
-  "rewrites": [
-    { "source": "/api/poly/:path*", "destination": "https://gamma-api.polymarket.com/:path*" },
-    { "source": "/api/kalshi/:path*", "destination": "https://api.elections.kalshi.com/trade-api/v2/:path*" }
-  ]
-}
-```
+> **Note:** This tool is intended for local use only. It is not designed to be internet-exposed — run it on your own machine and access it at `http://localhost:5173`.
 
 ## How It Works
 
@@ -73,7 +52,7 @@ Volume is tracked in 1-minute bins over a 90-minute rolling window. Bins accumul
 - **Frontend:** React 18 + Recharts
 - **Build:** Vite
 - **Data:** Polymarket Gamma API + Kalshi REST API (public, no auth required)
-- **Proxy:** Vite dev server proxy (dev only — see Deploy section for production)
+- **Proxy:** Vite dev server proxy (handles CORS for all upstream APIs)
 
 ## License
 
