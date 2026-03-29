@@ -24,7 +24,7 @@ function loadWalletCache() {
 }
 
 function saveWalletCache() {
-  try { localStorage.setItem(WALLET_CACHE_KEY, JSON.stringify(_walletCache || {})); } catch {}
+  try { localStorage.setItem(WALLET_CACHE_KEY, JSON.stringify(_walletCache || {})); } catch (e) { console.warn("[Wallets] localStorage save failed:", e.message); }
 }
 
 // Trade data cache — per conditionId, refreshed every 30s
@@ -230,11 +230,18 @@ export async function analyzeMarketWallets(conditionId) {
 }
 
 /**
- * Clear stale entries from trade cache.
+ * Clear stale entries from trade cache and cap size to prevent unbounded growth.
  */
 export function pruneWalletCache() {
   const now = Date.now();
   for (const [key, val] of _tradeCache) {
     if (now - val.ts > TRADE_CACHE_TTL * 10) _tradeCache.delete(key);
+  }
+  // Hard cap: if cache is still too large, evict oldest entries
+  const MAX_TRADE_CACHE = 200;
+  if (_tradeCache.size > MAX_TRADE_CACHE) {
+    const sorted = [..._tradeCache.entries()].sort((a, b) => a[1].ts - b[1].ts);
+    const toEvict = sorted.slice(0, _tradeCache.size - MAX_TRADE_CACHE);
+    for (const [key] of toEvict) _tradeCache.delete(key);
   }
 }
