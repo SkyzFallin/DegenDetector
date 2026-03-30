@@ -600,6 +600,8 @@ export default function DegenDetector() {
   const [sortBy, setSortBy] = useState("suspicion");
   const [conn, setConn] = useState({ polymarket: "loading", kalshi: "loading" });
   const [soundOn, setSoundOn] = useState(true);
+  const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
   const [telegramCfg, setTelegramCfg] = useState(() => loadTelegramConfig());
   const [showTgSettings, setShowTgSettings] = useState(false);
   const [tgDraft, setTgDraft] = useState({ botToken: "", chatId: "" });
@@ -629,6 +631,7 @@ export default function DegenDetector() {
   const alertedRef = useRef(new Map()); // marketId → timestamp (dedup outside React state)
   useEffect(() => { marketsRef.current = markets; }, [markets]);
   useEffect(() => { soundOnRef.current = soundOn; }, [soundOn]);
+  useEffect(() => { pausedRef.current = paused; }, [paused]);
   useEffect(() => { favIdsRef.current = new Set(favorites.map((f) => f.id)); }, [favorites]);
   useEffect(() => { telegramRef.current = telegramCfg; }, [telegramCfg]);
 
@@ -667,6 +670,7 @@ export default function DegenDetector() {
   useEffect(() => {
     if (loading) return;
     const iv = setInterval(async () => {
+      if (pausedRef.current) return;
       tickRef.current += 1;
       try {
         const updated = await refreshMarkets(marketsRef.current, favIdsRef.current);
@@ -816,6 +820,7 @@ export default function DegenDetector() {
           ))}
           <button onClick={manualRefresh} title="Refresh now" style={{ background: "transparent", border: `1px solid ${C.border}`, color: C.textMuted, borderRadius: 6, padding: "3px 7px", fontSize: 11, cursor: "pointer" }}>🔄</button>
           <button onClick={() => setSoundOn(!soundOn)} style={{ background: soundOn ? C.neonDim : "transparent", border: `1px solid ${soundOn ? C.neon + "33" : C.border}`, color: soundOn ? C.neon : C.textDim, borderRadius: 6, padding: "3px 7px", fontSize: 11, cursor: "pointer" }}>{soundOn ? "🔔" : "🔕"}</button>
+          <button onClick={() => setPaused(!paused)} title={paused ? "Resume live updates" : "Pause live updates (allows screen sleep)"} style={{ background: paused ? C.warningDim : "transparent", border: `1px solid ${paused ? C.warning + "55" : C.border}`, color: paused ? C.warning : C.textDim, borderRadius: 6, padding: "3px 7px", fontSize: 11, cursor: "pointer" }}>{paused ? "▶" : "⏸"}</button>
           <button onClick={() => { setShowTgSettings(!showTgSettings); if (!showTgSettings && telegramCfg) setTgDraft({ botToken: telegramCfg.botToken, chatId: telegramCfg.chatId }); }} style={{ background: telegramCfg ? `${C.blue}22` : "transparent", border: `1px solid ${telegramCfg ? C.blue + "33" : C.border}`, color: telegramCfg ? C.blue : C.textDim, borderRadius: 6, padding: "3px 7px", fontSize: 11, cursor: "pointer" }} title="Telegram alerts">{telegramCfg ? "✈️" : "⚙️"}</button>
           <div style={{ display: "flex", background: C.border, borderRadius: 6, padding: 2 }}>
             {["dashboard", "alerts", "favorites", "history"].map((v) => (
