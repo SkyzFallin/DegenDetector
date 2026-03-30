@@ -46,7 +46,8 @@ export function robustZ(val, win) {
  */
 export function computeSuspicion(market, atTime = null) {
   const bins = market.bins;
-  const z = robustZ(bins.at(-1), bins);
+  const baselineBins = bins.slice(0, -1);
+  const z = baselineBins.length >= 5 ? robustZ(bins.at(-1), baselineBins) : 0;
   const last5 = bins.slice(-5);
   const prev10 = bins.slice(-15, -5);
 
