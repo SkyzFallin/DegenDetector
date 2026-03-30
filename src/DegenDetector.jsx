@@ -70,8 +70,8 @@ const fmtExpiry = (h) => h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${Math.rou
 
 const marketUrl = (m) => {
   if (m.venue === "Polymarket" && m.slug) return `https://polymarket.com/event/${m.slug}`;
-  if (m.venue === "Kalshi" && m.eventTicker && m.sourceId)
-    return `https://kalshi.com/markets/${m.eventTicker.toLowerCase()}/${m.sourceId.toLowerCase()}`;
+  if (m.venue === "Kalshi" && m.eventTicker)
+    return `https://kalshi.com/markets/${m.eventTicker.toLowerCase()}`;
   return null;
 };
 
