@@ -186,7 +186,7 @@ export async function analyzeMarketWallets(conditionId) {
     const f = freshness.get(addr);
     if (f && f.isFresh) {
       freshWalletCount++;
-      freshWalletVolume += vol;
+      freshWalletVolume += vol; // freshWalletVolume only counts volume from wallets with <5 lifetime txs
       freshWallets.push({ wallet: addr, volume: vol, txCount: f.txCount, name: trades.find((t) => t.wallet === addr)?.name });
     }
   }
