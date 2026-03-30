@@ -68,6 +68,13 @@ const fmtN = (n) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1
 const fmtP = (p) => `${(p * 100).toFixed(1)}¢`;
 const fmtExpiry = (h) => h < 1 ? `${Math.round(h * 60)}m` : h < 24 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d`;
 
+const marketUrl = (m) => {
+  if (m.venue === "Polymarket" && m.slug) return `https://polymarket.com/event/${m.slug}`;
+  if (m.venue === "Kalshi" && m.eventTicker && m.sourceId)
+    return `https://kalshi.com/markets/${m.eventTicker.toLowerCase()}/${m.sourceId.toLowerCase()}`;
+  return null;
+};
+
 // ─── Telegram ────────────────────────────────────────────────
 const TG_STORAGE_KEY = "dd_telegram";
 
@@ -267,6 +274,7 @@ function MarketRow({ market, isSelected, onClick, onPin, onFav, isFav }) {
           {hot && <span style={{ fontSize: 8, animation: "pulse 0.8s infinite", flexShrink: 0 }}>🔥</span>}
           {!market.hasRecentNews && sus > 40 && <span style={{ fontSize: 8, flexShrink: 0 }} title="No correlated news">🔇</span>}
           <span style={{ fontSize: 11.5, fontWeight: 500, color: C.text, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{market.name}</span>
+          {marketUrl(market) && <a href={marketUrl(market)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} title={`Trade on ${market.venue}`} style={{ flexShrink: 0, fontSize: 9, color: C.textDim, textDecoration: "none", lineHeight: 1, padding: "1px 3px", borderRadius: 3, border: `1px solid ${C.border}`, background: C.bgElevated }}>↗</a>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4, paddingLeft: 16 }}>
           <VenueBadge venue={market.venue} />
@@ -436,7 +444,10 @@ function DetailPanel({ market, telegramCfg }) {
           <ExpiryBadge hours={market.expiryHours} />
           {!market.hasRecentNews && (<span style={{ fontSize: 9, color: C.warning, padding: "2px 6px", background: C.warningDim, borderRadius: 4 }}>🔇 No recent news</span>)}
         </div>
-        <h2 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: 0, marginBottom: 4 }}>{market.name}</h2>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 4 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: C.text, margin: 0, flex: 1 }}>{market.name}</h2>
+          {marketUrl(market) && <a href={marketUrl(market)} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, fontSize: 10, fontWeight: 700, color: market.venue === "Polymarket" ? C.poly : C.kalshi, textDecoration: "none", padding: "3px 8px", borderRadius: 5, border: `1px solid ${market.venue === "Polymarket" ? C.poly : C.kalshi}44`, background: `${market.venue === "Polymarket" ? C.poly : C.kalshi}11`, whiteSpace: "nowrap" }}>Trade on {market.venue} ↗</a>}
+        </div>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
           <span style={{ fontSize: 24, fontWeight: 800, fontFamily: "'Azeret Mono', monospace", color: C.text }}>{fmtP(market.price)}</span>
           <span style={{ fontSize: 13, fontWeight: 700, fontFamily: "'Azeret Mono', monospace", color: market.priceChange >= 0 ? C.neon : C.danger }}>{market.priceChange >= 0 ? "▲" : "▼"} {Math.abs(market.priceChange * 100).toFixed(1)}¢</span>

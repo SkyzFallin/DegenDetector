@@ -68,6 +68,7 @@ function mapKalshi(m, event) {
   return {
     id: `kalshi-${m.ticker}`,
     sourceId: m.ticker,
+    eventTicker: m.event_ticker || null,
     venue: "Kalshi",
     name: title,
     category,
