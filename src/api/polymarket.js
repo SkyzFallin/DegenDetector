@@ -6,6 +6,7 @@ import { classifyCategory, LEAK_PROBS } from "./categories.js";
 
 const BASE = "/api/poly";
 const FETCH_TIMEOUT = 8000;
+export const DEFAULT_LIMIT = 60;
 
 /**
  * Fetch active markets from Polymarket.
