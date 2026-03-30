@@ -34,6 +34,17 @@ Opens at `http://localhost:5173`. The Vite dev proxy handles CORS for both APIs.
 
 > **Note:** This tool is intended for local use only. It is not designed to be internet-exposed — run it on your own machine and access it at `http://localhost:5173`.
 
+## Testing
+
+The scoring logic (`src/scoring.js`) is fully covered by a unit test suite using [Vitest](https://vitest.dev/) — Vite's native test runner, zero extra config needed.
+
+```bash
+npm test          # run once
+npm run test:watch  # re-run on file changes
+```
+
+Tests cover: `clamp`, `median`, `mad`, `robustZ`, `computeSuspicion`, `susColor`, `susLabel`, and the `priceFlip` signal. All functions are pure (no DOM, no state) so tests run in < 50 ms.
+
 ## How It Works
 
 | Signal | Weight | What It Measures |
