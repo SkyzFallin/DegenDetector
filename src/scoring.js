@@ -53,7 +53,7 @@ export function computeSuspicion(market, atTime = null) {
   // 1. Spike suddenness (0-18)
   const recentAvg = last5.reduce((a, b) => a + b, 0) / (last5.length || 1);
   const baseAvg = Math.max(1, prev10.reduce((a, b) => a + b, 0) / (prev10.length || 1));
-  const suddenness = clamp((recentAvg / baseAvg - 1) / 4, 0, 18);
+  const suddenness = clamp((recentAvg / baseAvg - 1) / 4, 0, 1) * 18;
 
   // 2. Z-score magnitude (0-12)
   const zScore = clamp(z / 12, 0, 1) * 12;
@@ -95,7 +95,7 @@ export function computeSuspicion(market, atTime = null) {
 export function susColor(score) {
   if (score >= 80) return SUS_COLORS.sus100;
   if (score >= 60) return SUS_COLORS.sus80;
-  if (score >= 40) return SUS_COLORS.sus40;
+  if (score >= 40) return SUS_COLORS.sus60;
   if (score >= 20) return SUS_COLORS.sus20;
   return SUS_COLORS.sus0;
 }
