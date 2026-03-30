@@ -68,3 +68,7 @@ Volume is tracked in 1-minute bins over a 90-minute rolling window. Bins accumul
 ## License
 
 [MIT](LICENSE)
+
+---
+
+> This tool is for educational and informational purposes only — not financial advice. Past performance does not guarantee future results. Trade at your own risk.
