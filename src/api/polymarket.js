@@ -40,6 +40,7 @@ function mapPolymarket(m) {
   return {
     id: `poly-${m.id}`,
     sourceId: m.id,
+    slug: m.slug || null,
     conditionId: m.conditionId || null,
     venue: "Polymarket",
     name: m.question || m.slug || "Unknown",
