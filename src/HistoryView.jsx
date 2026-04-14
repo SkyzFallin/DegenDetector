@@ -140,17 +140,6 @@ const PRESETS = [
     newsHeadline: "Treasury data confirms national debt reduction",
     newsTime: "2025-06-04T18:57",
   },
-  {
-    label: "Top AI Model — Anthropic",
-    description: "700K contracts. Anthropic confirmed as top-ranked AI model. Did insiders front-run the benchmark?",
-    search: "anthropic",
-    ticker: "KXTOPAI-27-JAN01-ANTH",
-    venue: "Kalshi",
-    dateStart: "2026-02-07T00:00",
-    dateEnd: "2026-02-07T20:00",
-    newsHeadline: "Anthropic achieves top-ranked AI model status",
-    newsTime: "2026-02-07T16:01",
-  },
 ];
 
 export default function HistoryView() {
